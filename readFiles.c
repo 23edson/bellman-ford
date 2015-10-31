@@ -41,8 +41,8 @@ int countIn(char rot[CONST]){
 tabela_t *leEnlaces( char enl[CONST], int count, int myId){
 
   tabela_t *myConnect;
-  FILE *arq, *arq2;
-  int i,adj,custo,j;
+  FILE *arq;
+  int i,adj,custo;
 
   if(!(myConnect = (tabela_t *)malloc(sizeof(tabela_t))))
 		return NULL;
@@ -70,7 +70,7 @@ tabela_t *leEnlaces( char enl[CONST], int count, int myId){
   myConnect->idVizinho[myId-1] = myId; 
   myConnect->custo[myId-1] = 0;
   myConnect->idImediato[myId-1] = myId;
-  
+  myConnect->alterado = 0;
   //lê arestas com respectivos custos
   while(fscanf(arq,"%d %d %d", &i, &adj, &custo) != EOF){
 		if(i == myId && adj != myId){

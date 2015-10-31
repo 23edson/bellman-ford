@@ -9,7 +9,7 @@
 #define MAX_TENTATIVAS 3 //número max de tentativas após timeout
 #define TIMEOUT 2 //temporizador
 #define INFINITO 999 //representacao do infinito
-
+#define MAX_TIME_DV 5 
 //tabela de roteamento
 
 /**
@@ -20,12 +20,18 @@
  * 
  **/
 typedef struct tab{
-  
+  int alterado;
   int *idVizinho; //vertice
   int *custo;   //custo minimo
   int *idImediato; //proximo vertice no caminho até idVizinho
 }tabela_t;
 
+typedef struct dv{
+	int exists;
+	int *router;
+	int *dist;
+	
+}DistVector_t;
 
 /**
  * @struct msg_t - representa o pacote a ser enviado, juntamente com a mensagem do usuário.
@@ -42,6 +48,7 @@ typedef struct tab{
  **/
 
 typedef struct mensagem{
+  int tipo;
   int idMsg; //identificador da msg
   int origem; //quem enviou
   int destino; //para onde vai
@@ -51,6 +58,7 @@ typedef struct mensagem{
   int pSize;
   int ack; //flag para confirmacao
   int parent[MAX_PARENT]; //vetor de parent para o caso de info
+  DistVector_t *DV;
 }msg_t;
 
 /**
@@ -75,3 +83,5 @@ int countIn(char rot[CONST]); //conta vértices do grafo
 void enviarMsg(void); //Msg do usuário
 void server(void); //server que recebe mensagens
 void serverControl(void); //controle das filas
+msg_t initDV(msg_t me, int who);
+void SendDV(void);

@@ -56,7 +56,7 @@
 
 #define GETFILE 105 //constante para mensagem do usuário
 #define MAXFILA 50 //constante da fila de pacotes do roteador
-
+#define ALOCACAO_ERRO 0
 //gcc funcs.h readFiles.c router.c -D_REENTRANT -lpthread -o m
 
 /**
@@ -73,6 +73,8 @@ typedef struct fila{
 	msg_t *mesg;
 }fila_t;
 
+
+
 //Prototipação
 void remove_f();
 int iniciaFila();
@@ -87,12 +89,136 @@ int vertices; // Número de vértices do grafo;
 int tamanho = 0;//controle da fila, inicialmente vazia.
 tabela_t *myConnect = NULL; //lista de roteamento
 router_t *myRouter = NULL; //informações do roteador
-fila_t *filas = NULL; 
+fila_t *filas = NULL;
+//DistVector_t *DV = NULL;
 
 char rout_u[20] = "roteador.config"; //Arquivo de configuração dos roteadores;
 char link_u[20] = "enlaces.config"; //Arquivo de conf. dos enlaces;
 
 pthread_mutex_t count_mutex = PTHREAD_MUTEX_INITIALIZER; //mutex para controlar o acesso as variáveis globais
+
+DistVector_t *atualizaDV(DistVector_t *vector){
+	
+	int i;
+	for(i = 0; i < vertices; i++){
+		vector->dist[i] = myConnect->custo[i];
+		vector->router[i] = myConnect->idVizinho[i];
+			
+	}
+		
+	myConnect->alterado = 0;
+	
+	return vector;
+}
+
+
+DistVector_t *initDV2(DistVector_t *vetor){
+	
+	int i;
+	
+	for(i = 0; i < vertices; i++){
+		vetor->dist[i] = INFINITO;
+		vetor->router[i] = 0;
+	}
+	return vetor;
+}
+msg_t initDV(msg_t me, int who){
+	
+	router_t *vis = NULL;
+	//printf("valor %d  edma", who);
+	//int i, j;
+	//char ip[IP];
+	vis = leInfos(rout_u, who);
+	//puts("Oii");puts("tt");
+	strcpy(me.ip, vis->ip);
+	free(vis);
+	me.tipo = 2;
+	me.idMsg = 0;
+	me.origem = myRouter->id;
+	me.destino = who;
+	me.nextH = who;
+	//strcpy(me->ip, ip);
+	
+	//me.DV = (DistVector_t *)malloc(sizeof(DistVector_t));
+	//if(!me.DV){
+	//	me.tipo = ALOCACAO_ERRO;
+		
+	//}
+	
+	
+	//me->DV->exists = (int *)malloc(sizeof(int)*vertices);
+	//me.DV->dist = (int *)malloc(sizeof(int)*vertices);
+	//me.DV->router = (int *)malloc(sizeof(int)*vertices);
+	
+	return me;
+}
+void SendDV(void){
+
+  time_t timestamp = 0;
+  //router_t *vis = NULL;
+  msg_t *mensg;
+  DistVector_t *vetor;
+  int vizinhos = 0;
+  int i;
+  int *vet;
+  vetor = (DistVector_t *)malloc(sizeof(DistVector_t));
+  vetor->dist = (int *)malloc(sizeof(int)*vertices);
+  vetor->router = (int *)malloc(sizeof(int)*vertices);
+  vetor = initDV2(vetor);
+  vetor->dist[myRouter->id-1] = 0;
+  vetor->router[myRouter->id-1] = myRouter->id;
+  
+  
+  vet = (int *)malloc(sizeof(int)*vertices);
+  
+  for(i = 0; i < vertices; i++){
+	  if((myConnect->idVizinho[i] != myRouter->id) && (myConnect->custo[i] != INFINITO) && (myConnect->idImediato[i] == myConnect->idVizinho[i])){
+			vet[vizinhos] = myConnect->idVizinho[i];
+			vetor->dist[myConnect->idVizinho[i]-1] = myConnect->custo[i];
+			vetor->router[myConnect->idVizinho[i]-1] = myConnect->idImediato[i];
+			vizinhos++;
+			
+		}
+  }
+  //printf("vv: %d %d %d ~  \n", vet[0], myConnect->idVizinho[0],vizinhos);
+  mensg = (msg_t *)malloc(sizeof(msg_t)*vizinhos);
+  
+  for( i = 0; i < vizinhos; i++){
+	  mensg[i] = initDV(mensg[i], vet[i]);
+	  mensg[i].DV = vetor;
+   }
+	
+	printf("id %d dest %d e %d\n",mensg[1].origem,mensg[1].destino,mensg[1].DV->dist[0]);
+	
+	//printf("id1 %d des1 %d\n",mensg[1].origem,mensg[1].destino);
+  timestamp = time(0);
+  usleep(300000);
+  while(1){
+	  //timestamp = time(0);
+	  pthread_mutex_lock(&count_mutex);
+	  
+	  if(myConnect->alterado == 1){
+		  vetor = atualizaDV(vetor);
+		  
+	  }
+	  if(difftime(time(0), timestamp) > MAX_TIME_DV){
+			
+			if(!filas)
+				if(!iniciaFila())return;
+			
+			for( i = 0; i < vizinhos; i++){
+				insereFila(&mensg[i]);
+			}
+			
+			//insereFila(&mensg);
+			timestamp = time(0);
+			
+	  }
+	  pthread_mutex_unlock(&count_mutex);
+  }
+
+}
+
 
 
 /**
@@ -635,22 +761,25 @@ int main(int argc, char *arq[]){
   //Lê informações sobre este roteador ( id, porta, ip)   
   if(!(myRouter = leInfos(rout_u, routerId))) return 0;
   
-  //int i;
+  int i;
   
-  //for(i = 0; i < vertices; i++){
-//	  printf("%d %d %d\n", myConnect->idVizinho[i],myConnect->custo[i],myConnect->idImediato[i]);
+  for(i = 0; i < vertices; i++){
+	  printf("%d %d %d\n", myConnect->idVizinho[i],myConnect->custo[i],myConnect->idImediato[i]);
 	  
-  //}
+  }
   //cria 3 threads para controlar o roteador
-  pthread_create(&tids[0], NULL, (void *)server, NULL); //server que recebe os pacotes
-  pthread_create(&tids[1], NULL, (void *)enviarMsg, NULL); //client que manda as mensagens
-  pthread_create(&tids[2], NULL, (void *)serverControl, NULL); //controle da fila e encaminhamentos dos pacotes
+  //pthread_create(&tids[0], NULL, (void *)server, NULL); //server que recebe os pacotes
+  //pthread_create(&tids[1], NULL, (void *)enviarMsg, NULL); //client que manda as mensagens
+  //pthread_create(&tids[2], NULL, (void *)serverControl, NULL); //controle da fila e encaminhamentos dos pacotes
   
   /*pthread_join(tids[1], NULL);
   pthread_cancel(tids[0]);
   pthread_cancel(tids[2]);
   pthread_join(tids[0], NULL);
   pthread_join(tids[2], NULL);
+  
   */
+  
+  SendDV();
   return 0;
 }
