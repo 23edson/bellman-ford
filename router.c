@@ -191,8 +191,9 @@ void SendDV(void){
 	printf("id %d dest %d e %d\n",mensg[1].origem,mensg[1].destino,mensg[1].DV->dist[0]);
 	
 	//printf("id1 %d des1 %d\n",mensg[1].origem,mensg[1].destino);
-  timestamp = time(0);
   usleep(300000);
+  timestamp = time(0);
+  
   while(1){
 	  //timestamp = time(0);
 	  pthread_mutex_lock(&count_mutex);
@@ -262,6 +263,7 @@ void enviarMsg(void){
 		
 			for( i = 0; i < vertices; i++){ //inicializa a estrutura do pacote
 				if(myConnect[myRouter->id-1].idVizinho[i] == destino){
+					mensg.tipo = 1;
 					mensg.origem = myRouter->id;
 					mensg.destino = destino;
 					mensg.nextH = myConnect[myRouter->id-1].idImediato[i];
@@ -526,16 +528,20 @@ void serverControl(){
 					remove_f();//caso deu erro, apenas remove
 				}
 				else{
-			 
+					
 					filas[i].tentativas++; //incrementa o numero de tentativas
 					filas[i].timestamp = time(0); //conta o tempo a partir de agora
 					save = filas[i].tentativas;
 					saveId = filas[i].id; //copia em variaveis auxiliares
 					back = filas[i].timestamp;
 					conf = copyData(conf, filas[i].mesg);//copia para estrutura dinâmica
-					remove_f();
-					insere_fix(conf, save, saveId, back);//tem efeito de pegar o primeiro e colocar por último na fila, mantendo os atributos
+					
+					if(filas[i].mesg->tipo == 1){//se nao for mensagem do atualizado do DV
+						remove_f();
+						insere_fix(conf, save, saveId, back);//tem efeito de pegar o primeiro e colocar por último na fila, mantendo os atributos
+					}
 				}
+			
 			}
 			else if(filas[i].tentativas > 0 && filas[i].tentativas < MAX_TENTATIVAS){
 				double tempo = difftime(time(0), filas[i].timestamp);
@@ -553,9 +559,11 @@ void serverControl(){
 						save = filas[i].tentativas;
 						saveId = filas[i].id;
 						conf = copyData(conf,filas[i].mesg);
-						remove_f();
 						
-						insere_fix(conf,save,saveId,back); //coloca no final da fila
+						if(filas[i].mesg->tipo == 1){//se nao for mensagem de atualizacao DV
+							remove_f();
+							insere_fix(conf,save,saveId,back); //coloca no final da fila
+						}
 					 }
 				 }
 				else if(filas[i].tentativas < MAX_TENTATIVAS && tempo <= TIMEOUT){ //Aprox 2s
@@ -564,9 +572,12 @@ void serverControl(){
 					 save = filas[i].tentativas;
 					 back = filas[i].timestamp;
 					 saveId = filas[i].id;
-					 remove_f();
-					 insere_fix(conf,save,saveId,back); //coloca no final da fila
-					 //total aproximadamente de 6s para tentar enviar
+					 
+					 if(filas[i].mesg->tipo == 1){//se nao for msg de DV
+						remove_f();
+						insere_fix(conf,save,saveId,back); //coloca no final da fila
+						//total aproximadamente de 6s para tentar enviar
+					}
 				 }
 			}
 			else{
@@ -593,7 +604,7 @@ void serverControl(){
 msg_t *copyData(msg_t *new, msg_t *buf){
 	
 	int i;
-	
+	new->tipo = buf->tipo;
 	new->origem = buf->origem;
 	new->destino = buf->destino;
 	new->nextH = buf->nextH;
@@ -602,6 +613,8 @@ msg_t *copyData(msg_t *new, msg_t *buf){
 	new->ack = buf->ack;
 	new->idMsg = buf->idMsg;
 	new->pSize = buf->pSize;
+	if(buf->tipo == 2)
+		new->DV = buf->DV;
 	
 	for(i = 0 ; i < MAX_PARENT; i++)
 		new->parent[i] = buf->parent[i];
@@ -625,6 +638,7 @@ int iniciaFila(){
 	}
 	for(i = 0; i < MAXFILA; i++){
 		filas[i].mesg = NULL;
+		filas[i].mesg->DV = NULL;
 		filas[i].id = 0;
 		filas[i].timestamp = 0;
 		filas[i].tentativas = 0;
@@ -637,7 +651,8 @@ int iniciaFila(){
 void insereFila(msg_t *buf){
 	
 	msg_t *nova = (msg_t *)malloc(sizeof(msg_t));
-
+	int i;
+	
 	if(!filas){
 		printf("Impossivel inserir. Problema com a fila\n");
 		return;
@@ -646,15 +661,32 @@ void insereFila(msg_t *buf){
 		nova = copyData(nova,buf);
 	
 		filas[tamanho].mesg = nova;
-		
-		if(tamanho == 0){
-			filas[tamanho].id = 1; //primeiro pacote tem id=1 
-			filas[tamanho].timestamp = filas[tamanho].tentativas =0;
+		if(buf->tipo == 2 && tamanho > 0){ //desloca uma posicao para direita(DV tem prioridade)
+			for(i = tamanho - 1 ; i >=0; i++){
+				
+				filas[i+1].tentativas = filas[i].tentativas;
+				filas[i+1].timestamp = filas[i].timestamp;
+				filas[i+1].mesg = filas[i].mesg;
+				
+				
+			}
+			
+			filas[0].id = filas[tamanho].id+1; //id incremental a partir de 1
+			filas[0].timestamp = filas[tamanho].tentativas =0;
+			
 			
 		}
 		else{
-			filas[tamanho].id = filas[tamanho-1].id+1; //id incremental a partir de 1
-			filas[tamanho].timestamp = filas[tamanho].tentativas =0;
+			if(tamanho == 0){
+				filas[tamanho].id = 1; //primeiro pacote tem id=1 
+				filas[tamanho].timestamp = filas[tamanho].tentativas =0;
+			
+			}
+			else{
+				filas[tamanho].id = filas[tamanho-1].id+1; //id incremental a partir de 1
+				filas[tamanho].timestamp = filas[tamanho].tentativas =0;
+			}
+			
 		}
 		tamanho++;//tamanho global da fila
 	}
@@ -703,7 +735,8 @@ void insere_fix(msg_t *buf, int save, int saveID, time_t back){
 void remove_f(){
 	
 	int i;
-	
+	if(filas[0].mesg->tipo == 2)
+		free(filas[0].mesg->DV);
 	free(filas[0].mesg); //libera espaço
 	filas[0].mesg = NULL; 
 	for(i = 1; i < tamanho; i++){
@@ -729,13 +762,18 @@ void remove_fix(int i){
 		
 	}		
 	else if( i == tamanho - 1){ //se for o ultimo
-		free(filas[0].mesg);
+		if(filas[i].mesg->DV == 2)
+			free(filas[i].mesg->DV);
+		//free(filas[0].mesg);
+		free(filas[i].mesg); 
 		filas[i].mesg = NULL;
 		tamanho--;
 		
 	}
 	else{ //caso for algum intermediario
 		for(j = i; j < tamanho-1; j++){
+			if(filas[j].mesg->DV == 2)
+				free(filas[j].mesg->DV);
 			free(filas[j].mesg);
 			filas[j].mesg = filas[j+1].mesg;
 			

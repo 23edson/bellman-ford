@@ -48,7 +48,7 @@ typedef struct dv{
  **/
 
 typedef struct mensagem{
-  int tipo;
+  int tipo; //tipo da mensagem
   int idMsg; //identificador da msg
   int origem; //quem enviou
   int destino; //para onde vai
