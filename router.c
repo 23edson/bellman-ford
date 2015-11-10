@@ -110,7 +110,7 @@ DistVector_t *atualizaDV(DistVector_t *vector){
 	
 	return vector;
 }
-
+s
 
 DistVector_t *initDV2(DistVector_t *vetor){
 	
@@ -118,11 +118,11 @@ DistVector_t *initDV2(DistVector_t *vetor){
 	
 	for(i = 0; i < vertices; i++){
 		vetor->dist[i] = INFINITO;
-		vetor->router[i] = 0;
+		vetor->router[i] = INFINITO;
 	}
 	return vetor;
 }
-msg_t initDV(msg_t me, int who){
+msg_t initDV(msg_t me, int who,int id){
 	
 	router_t *vis = NULL;
 	//printf("valor %d  edma", who);
@@ -133,7 +133,8 @@ msg_t initDV(msg_t me, int who){
 	strcpy(me.ip, vis->ip);
 	free(vis);
 	me.tipo = 2;
-	me.idMsg = 0;
+	me.ack = 0;
+	me.idMsg = id;
 	me.origem = myRouter->id;
 	me.destino = who;
 	me.nextH = who;
@@ -161,6 +162,7 @@ void SendDV(void){
   int vizinhos = 0;
   int i;
   int *vet;
+  int id = 1;
   vetor = (DistVector_t *)malloc(sizeof(DistVector_t));
   vetor->dist = (int *)malloc(sizeof(int)*vertices);
   vetor->router = (int *)malloc(sizeof(int)*vertices);
@@ -172,6 +174,8 @@ void SendDV(void){
   vet = (int *)malloc(sizeof(int)*vertices);
   
   for(i = 0; i < vertices; i++){
+	  //vetor->dist[i] = INFINITO;
+	  //vetor->router[i] = INFINITO;
 	  if((myConnect->idVizinho[i] != myRouter->id) && (myConnect->custo[i] != INFINITO) && (myConnect->idImediato[i] == myConnect->idVizinho[i])){
 			vet[vizinhos] = myConnect->idVizinho[i];
 			vetor->dist[myConnect->idVizinho[i]-1] = myConnect->custo[i];
@@ -184,7 +188,7 @@ void SendDV(void){
   mensg = (msg_t *)malloc(sizeof(msg_t)*vizinhos);
   
   for( i = 0; i < vizinhos; i++){
-	  mensg[i] = initDV(mensg[i], vet[i]);
+	  mensg[i] = initDV(mensg[i], vet[i],id++);
 	  mensg[i].DV = vetor;
    }
 	
@@ -200,14 +204,23 @@ void SendDV(void){
 	  
 	  if(myConnect->alterado == 1){
 		  vetor = atualizaDV(vetor);
+		  if(!filas)
+			if(!iniciaFila())return;
+		    
+		  for( i = 0; i < vizinhos; i++){
+				mensg[i].idMsg = id++;
+				insereFila(&mensg[i]);
+			}
+		  timestamp = time(0);
 		  
 	  }
-	  if(difftime(time(0), timestamp) > MAX_TIME_DV){
+	  else if(difftime(time(0), timestamp) > MAX_TIME_DV){
 			
 			if(!filas)
 				if(!iniciaFila())return;
 			
 			for( i = 0; i < vizinhos; i++){
+				mensg[i].idMsg = id++;
 				insereFila(&mensg[i]);
 			}
 			
@@ -314,10 +327,10 @@ int encaminhaMsg(int s, struct sockaddr_in *etc, msg_t *buf){
 	int t = sizeof(*etc);
 	router_t *destRouter = NULL;
 	
-	if(buf->ack == 1){ //se for mensagem de confirmação (ack)
+	if(buf->ack == 1 && buf->tipo == 1){ //se for mensagem de confirmação (ack)
 		for(i = 0; i < vertices; i++){ //procura o roteador vizinho que pertence ao caminho mínimo do destino até a origem
-			if(myConnect[myRouter->id-1].idVizinho[i] == buf->parent[buf->pSize]){
-				buf->nextH = myConnect[myRouter->id-1].idImediato[i];
+			if(myConnect.idVizinho[i] == buf->parent[buf->pSize]){
+				buf->nextH = myConnect.idImediato[i];
 			
 				if(!(destRouter = leInfos(rout_u, buf->nextH))){
 					printf("Destino nao e valido\n");return 0;
@@ -328,10 +341,16 @@ int encaminhaMsg(int s, struct sockaddr_in *etc, msg_t *buf){
 			
 		}
 	}
+	else if(buf->tipo == 2){
+		if(!(destRouter = leInfos(rout_u, buf->destino))){
+			printf("Destino nao e valido\n");return 0;
+		}
+	}
+	
 	else{
 		for( i = 0; i < vertices; i++){//procura o roteador vizinho que pertence ao caminho mínimo da origem até o destino
-			if(myConnect[myRouter->id-1].idVizinho[i] == buf->destino){
-				buf->nextH = myConnect[myRouter->id-1].idImediato[i];
+			if(myConnect.idVizinho[i] == buf->destino){
+				buf->nextH = myConnect.idImediato[i];
 				if(!(destRouter = leInfos(rout_u, buf->nextH))){
 					printf("Destino nao e valido\n");return 0;
 				}
@@ -352,8 +371,10 @@ int encaminhaMsg(int s, struct sockaddr_in *etc, msg_t *buf){
 		printf("Nao foi possivel encaminhar a mensagem()...\n");
 		return 0;
 	}
-	if(!buf->ack) //define os formatos de msg de apresentação para o usuário
+	if(!buf->ack && buf->tipo == 1) //define os formatos de msg de apresentação para o usuário
 		printf("\nRoteador : %d encaminhando msg #%d de %d bytes para roteador : %d\n", myRouter->id,buf->idMsg, (int )strlen(buf->text),destRouter->id); 
+	else if(!buf->ack && buf->tipo == 2)
+		printf("Roteador : %d enviando pacote #%d para roteador %d\n", myRouter->id,buf->idMsg, destRouter->id); 
 	else
 		printf("\nRoteador : %d enviando confirmacao de pacote #%d para rot. %d\n", myRouter->id, buf->idMsg, destRouter->id);
 	
@@ -378,7 +399,7 @@ int encaminhaMsg(int s, struct sockaddr_in *etc, msg_t *buf){
 
 void server(void){ //Para receber as mensagens
 	
-	int s, recv_len,i,flag = 0;
+	int s,temp, recv_len,i,flag = 0;
 	struct sockaddr_in si_me, si_other;
 	socklen_t len;
 	msg_t mensg;
@@ -416,6 +437,41 @@ void server(void){ //Para receber as mensagens
 		
 		pthread_mutex_lock(&count_mutex); //Acesso único também a partir deste ponto
 		
+		
+		if(mensg.tipo == 2){ //mensagem de dv
+			msg_t *conf = (msg_t *)malloc(sizeof(msg_t));
+			if(mensg.ack == 1){
+				printf("Pacote #%d recebido\n");
+				for(i = 0; i < tamanho; i++){//remove da fila o pacote 
+					if(filas[i].mesg->origem == mensg.destino && filas[i].mesg->idMsg == mensg.idMsg){
+						remove_fix(i);
+						break;
+					}
+				}
+			}
+			else{
+			
+			
+				for(i = 0 ; i < tamanho; i++){
+					
+					if(mensg.DV->router[i] != INFINITO && mensg.DV->router[i]!= myRouter->id) {
+						if( (temp = mensg.DV->dist[i]. + myConnect[mensg.DV->router[i]].custo) < myConnect[i].custo){
+					
+							myConnect[i].custo = temp;
+							myConnect[i].idImediato = mensg.origem;
+							myConnect.alterado = 1;
+						} 
+					}
+		
+				}
+				mensg.ack = 1;
+				mensg.nextH = mensg.origem;
+				mensg.origem = mensg.destino;
+				conf = copyData(conf, &mensg);
+				insereFila(conf);
+			}
+		}
+		else{
 		if((mensg.destino != myRouter->id) && (mensg.ack == 0)){ //caso este nao for o destino
 			
 			for(i = 0; i < tamanho; i++){ //ignorar pacotes ja recebidos no caso de retransmissoes
@@ -468,6 +524,7 @@ void server(void){ //Para receber as mensagens
 				}
 			}
 		}
+	}
 		pthread_mutex_unlock(&count_mutex);
 	}
 }
@@ -615,9 +672,9 @@ msg_t *copyData(msg_t *new, msg_t *buf){
 	new->pSize = buf->pSize;
 	if(buf->tipo == 2)
 		new->DV = buf->DV;
-	
-	for(i = 0 ; i < MAX_PARENT; i++)
-		new->parent[i] = buf->parent[i];
+	else
+		for(i = 0 ; i < MAX_PARENT; i++)
+			new->parent[i] = buf->parent[i];
 
 
 	

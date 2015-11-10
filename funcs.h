@@ -83,5 +83,5 @@ int countIn(char rot[CONST]); //conta vértices do grafo
 void enviarMsg(void); //Msg do usuário
 void server(void); //server que recebe mensagens
 void serverControl(void); //controle das filas
-msg_t initDV(msg_t me, int who);
+msg_t initDV(msg_t me, int who, int id);
 void SendDV(void);
