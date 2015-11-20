@@ -55,7 +55,7 @@
 #include <time.h>
 
 #define GETFILE 105 //constante para mensagem do usuário
-#define MAXFILA 50 //constante da fila de pacotes do roteador
+//#define MAXFILA 100 //constante da fila de pacotes do roteador
 #define ALOCACAO_ERRO 0
 //gcc funcs.h readFiles.c router.c -D_REENTRANT -lpthread -o m
 
@@ -110,7 +110,7 @@ DistVector_t *atualizaDV(DistVector_t *vector){
 	
 	return vector;
 }
-s
+
 
 DistVector_t *initDV2(DistVector_t *vetor){
 	
@@ -192,7 +192,7 @@ void SendDV(void){
 	  mensg[i].DV = vetor;
    }
 	
-	printf("id %d dest %d e %d\n",mensg[1].origem,mensg[1].destino,mensg[1].DV->dist[0]);
+	//printf("id %d dest %d e %d\n",mensg[1].origem,mensg[1].destino,mensg[1].DV->dist[0]);
 	
 	//printf("id1 %d des1 %d\n",mensg[1].origem,mensg[1].destino);
   usleep(300000);
@@ -282,6 +282,7 @@ void enviarMsg(void){
 					mensg.nextH = myConnect[myRouter->id-1].idImediato[i];
 					mensg.ack = 0;
 					mensg.pSize = 0;
+					mensg.DV = NULL;
 					strcpy(mensg.ip, destRouter->ip);
 					break;
 				}
@@ -329,8 +330,8 @@ int encaminhaMsg(int s, struct sockaddr_in *etc, msg_t *buf){
 	
 	if(buf->ack == 1 && buf->tipo == 1){ //se for mensagem de confirmação (ack)
 		for(i = 0; i < vertices; i++){ //procura o roteador vizinho que pertence ao caminho mínimo do destino até a origem
-			if(myConnect.idVizinho[i] == buf->parent[buf->pSize]){
-				buf->nextH = myConnect.idImediato[i];
+			if(myConnect->idVizinho[i] == buf->parent[buf->pSize]){
+				buf->nextH = myConnect->idImediato[i];
 			
 				if(!(destRouter = leInfos(rout_u, buf->nextH))){
 					printf("Destino nao e valido\n");return 0;
@@ -349,8 +350,8 @@ int encaminhaMsg(int s, struct sockaddr_in *etc, msg_t *buf){
 	
 	else{
 		for( i = 0; i < vertices; i++){//procura o roteador vizinho que pertence ao caminho mínimo da origem até o destino
-			if(myConnect.idVizinho[i] == buf->destino){
-				buf->nextH = myConnect.idImediato[i];
+			if(myConnect->idVizinho[i] == buf->destino){
+				buf->nextH = myConnect->idImediato[i];
 				if(!(destRouter = leInfos(rout_u, buf->nextH))){
 					printf("Destino nao e valido\n");return 0;
 				}
@@ -420,6 +421,7 @@ void server(void){ //Para receber as mensagens
 		exit(1);
 	}
 	pthread_mutex_lock(&count_mutex); //Acesso a fila, então o uso de mutex
+	
 	if(!iniciaFila()){
 		printf("Impossivel alocar a fila\n");
 		exit(1);
@@ -441,7 +443,7 @@ void server(void){ //Para receber as mensagens
 		if(mensg.tipo == 2){ //mensagem de dv
 			msg_t *conf = (msg_t *)malloc(sizeof(msg_t));
 			if(mensg.ack == 1){
-				printf("Pacote #%d recebido\n");
+				printf("Pacote DV #%d encaminhado para %d\n", mensg.idMsg,mensg.origem);
 				for(i = 0; i < tamanho; i++){//remove da fila o pacote 
 					if(filas[i].mesg->origem == mensg.destino && filas[i].mesg->idMsg == mensg.idMsg){
 						remove_fix(i);
@@ -455,11 +457,11 @@ void server(void){ //Para receber as mensagens
 				for(i = 0 ; i < tamanho; i++){
 					
 					if(mensg.DV->router[i] != INFINITO && mensg.DV->router[i]!= myRouter->id) {
-						if( (temp = mensg.DV->dist[i]. + myConnect[mensg.DV->router[i]].custo) < myConnect[i].custo){
+						if( (temp = mensg.DV->dist[i] + myConnect->custo[mensg.DV->router[i]]) < myConnect->custo[i]){
 					
-							myConnect[i].custo = temp;
-							myConnect[i].idImediato = mensg.origem;
-							myConnect.alterado = 1;
+							myConnect->custo[i] = temp;
+							myConnect->idImediato[i] = mensg.origem;
+							myConnect->alterado = 1;
 						} 
 					}
 		
@@ -604,7 +606,8 @@ void serverControl(){
 				double tempo = difftime(time(0), filas[i].timestamp);
 			 
 				 if(filas[i].tentativas < MAX_TENTATIVAS && tempo > TIMEOUT){ //max 3 tentativas
-					printf("\nRetransmissao\n");
+					if(filas[i].mesg->tipo == 1)
+						printf("\nRetransmissao\n");
 					if(encaminhaMsg(s,&controle, filas[i].mesg)==0){
 						remove_f();
 					}
@@ -638,7 +641,8 @@ void serverControl(){
 				 }
 			}
 			else{
-				printf("\nNao foi possivel encaminhar a mensagem\n");
+				if(filas[i].mesg->tipo == 1)
+					printf("\nNao foi possivel encaminhar a mensagem\n");
 				remove_f(); //Desiste de enviar
 			}
 			pthread_mutex_unlock(&count_mutex);
@@ -688,14 +692,15 @@ msg_t *copyData(msg_t *new, msg_t *buf){
 int iniciaFila(){
 	
 	int i;
-	filas = malloc(sizeof(fila_t)*MAXFILA); //fila com tamanho fixo MAXFILA
+	filas = (fila_t *)malloc(sizeof(fila_t)*MAXFILA); //fila com tamanho fixo MAXFILA
+	
 	if(!filas){
 		printf("Falha na alocacao\n");
 		return 0;
 	}
 	for(i = 0; i < MAXFILA; i++){
 		filas[i].mesg = NULL;
-		filas[i].mesg->DV = NULL;
+		//filas[i].mesg->DV = NULL;
 		filas[i].id = 0;
 		filas[i].timestamp = 0;
 		filas[i].tentativas = 0;
@@ -819,7 +824,7 @@ void remove_fix(int i){
 		
 	}		
 	else if( i == tamanho - 1){ //se for o ultimo
-		if(filas[i].mesg->DV == 2)
+		if(filas[i].mesg->tipo == 2)
 			free(filas[i].mesg->DV);
 		//free(filas[0].mesg);
 		free(filas[i].mesg); 
@@ -829,7 +834,7 @@ void remove_fix(int i){
 	}
 	else{ //caso for algum intermediario
 		for(j = i; j < tamanho-1; j++){
-			if(filas[j].mesg->DV == 2)
+			if(filas[j].mesg->tipo == 2)
 				free(filas[j].mesg->DV);
 			free(filas[j].mesg);
 			filas[j].mesg = filas[j+1].mesg;
@@ -844,37 +849,41 @@ void remove_fix(int i){
 
 int main(int argc, char *arq[]){
   
-  pthread_t tids[3];
+  pthread_t tids[4];
   
   if(!arq[1]){printf("Problema com o id do roteador\n");return 0;}
   int  routerId = atoi(arq[1]);//Lê o ID do roteador da linha de comando
   
- 
+	
   //Lê a tabela de roteamento com os caminhos mínimos já computados
   if(!(myConnect = leEnlaces(link_u, vertices =countIn(rout_u),routerId)))return 0;
     
   //Lê informações sobre este roteador ( id, porta, ip)   
   if(!(myRouter = leInfos(rout_u, routerId))) return 0;
   
-  int i;
+  //int i;
   
-  for(i = 0; i < vertices; i++){
-	  printf("%d %d %d\n", myConnect->idVizinho[i],myConnect->custo[i],myConnect->idImediato[i]);
+  //for(i = 0; i < vertices; i++){
+//	  printf("%d %d %d\n", myConnect->idVizinho[i],myConnect->custo[i],myConnect->idImediato[i]);
 	  
-  }
+  //}
   //cria 3 threads para controlar o roteador
-  //pthread_create(&tids[0], NULL, (void *)server, NULL); //server que recebe os pacotes
-  //pthread_create(&tids[1], NULL, (void *)enviarMsg, NULL); //client que manda as mensagens
-  //pthread_create(&tids[2], NULL, (void *)serverControl, NULL); //controle da fila e encaminhamentos dos pacotes
+ printf("%d", MAXFILA);
+  pthread_create(&tids[0], NULL, (void *)server, NULL); //server que recebe os pacotes
+ /* pthread_create(&tids[1], NULL, (void *)SendDV, NULL);
+  pthread_create(&tids[2], NULL, (void *)enviarMsg, NULL); //client que manda as mensagens
+  pthread_create(&tids[3], NULL, (void *)serverControl, NULL); //controle da fila e encaminhamentos dos pacotes
   
-  /*pthread_join(tids[1], NULL);
+  pthread_join(tids[2], NULL);
   pthread_cancel(tids[0]);
   pthread_cancel(tids[2]);
+  pthread_cancel(tids[3]);
   pthread_join(tids[0], NULL);
-  pthread_join(tids[2], NULL);
+  pthread_join(tids[1], NULL);
+  pthread_join(tids[3], NULL);*/ 
+  pthread_join(tids[0], NULL);
   
-  */
   
-  SendDV();
+ // SendDV();
   return 0;
 }
