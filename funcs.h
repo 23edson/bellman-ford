@@ -4,12 +4,14 @@
 
 #define CONST 40 //constante para tamanho de arquivo
 #define IP 15 //constante do ip
-#define MAX_PARENT 100 //vetor de pais tamanho fixo
+#define MAX_PARENT 20 //vetor de pais tamanho fixo
 #define MAXFILA 100//tamanho máximo da fila 
 #define MAX_TENTATIVAS 3 //número max de tentativas após timeout
 #define TIMEOUT 2 //temporizador
 #define INFINITO 999 //representacao do infinito
-#define MAX_TIME_DV 7
+#define MAX_TIME_DV 14
+#define CONSTANTE_DV 20
+
 //tabela de roteamento
 
 /**
@@ -27,9 +29,9 @@ typedef struct tab{
 }tabela_t;
 
 typedef struct dv{
-	int exists;
-	int *router;
-	int *dist;
+	//int exists;
+	int router[MAX_PARENT];
+	int dist[MAX_PARENT];
 	
 }DistVector_t;
 
@@ -58,8 +60,10 @@ typedef struct mensagem{
   int pSize;
   int ack; //flag para confirmacao
   int parent[MAX_PARENT]; //vetor de parent para o caso de info
-  DistVector_t *DV;
+  //DistVector_t *DV;
+  DistVector_t DV;
 }msg_t;
+
 
 /**
  * @struct router_t - Representa as informações sobre um roteador.

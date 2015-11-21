@@ -80,19 +80,19 @@ void remove_f();
 int iniciaFila();
 void insereFila(msg_t *buf);
 void remove_fix(int i);
-void insere_fix(msg_t *buf, int save, int saveID, time_t back);
+void insere_fix(msg_t *nova, int save, int saveID, time_t back);
 //msg_t *copyStatic(msg_t *new, msg_t buf);
 msg_t *copyData(msg_t *new, msg_t *buf);
-
+DistVector_t *copyVector(DistVector_t *new, DistVector_t *buf);
 //Variáveis compartilhadas entre as threads
 
-int vertices; // Número de vértices do grafo;
+int vertices,vizinhos=0; // Número de vértices do grafo;
 int tamanho = 0;//controle da fila, inicialmente vazia.
 tabela_t *myConnect = NULL; //lista de roteamento
 router_t *myRouter = NULL; //informações do roteador
 fila_t *filas = NULL;
-//DistVector_t *DV = NULL;
-
+ DistVector_t *vetor = NULL;
+int teste =0 ;
 char rout_u[20] = "roteador.config"; //Arquivo de configuração dos roteadores;
 char link_u[20] = "enlaces.config"; //Arquivo de conf. dos enlaces;
 
@@ -154,20 +154,53 @@ msg_t initDV(msg_t me, int who,int id){
 	
 	return me;
 }
+/*msg_t *structureDV(msg_t mensg){
+	
+	int *vet;
+	
+	vetor = (DistVector_t *)malloc(sizeof(DistVector_t));
+	vetor->dist = (int *)malloc(sizeof(int)*vertices);
+    vetor->router = (int *)malloc(sizeof(int)*vertices);
+    vetor = initDV2(vetor); //inicializa todo mundo com infinito
+    vetor->dist[myRouter->id-1] = 0;
+    vetor->router[myRouter->id-1] = myRouter->id;//distancia para mim mesmo é zero
+    
+    vet = (int *)malloc(sizeof(int)*vertices);
+    
+    
+    for(i = 0; i < vertices; i++){
+	  //vetor->dist[i] = INFINITO;
+	  //vetor->router[i] = INFINITO;
+	  if((myConnect->idVizinho[i] != myRouter->id) && (myConnect->custo[i] != INFINITO) && (myConnect->idImediato[i] == myConnect->idVizinho[i])){
+			vet[vizinhos] = myConnect->idVizinho[i];
+			vetor->dist[i] = myConnect->custo[i];
+			vetor->router[i] = myConnect->idImediato[i];
+			vizinhos++;
+			
+		}
+  }
+  
+  mensg = (msg_t *)malloc(sizeof(msg_t)*vizinhos);
+  
+  for( i = 0; i < vizinhos; i++){
+	  mensg[i] = initDV(mensg[i], vet[i],id++);
+	  mensg[i].DV = vetor;
+   }
+}*/
 void SendDV(void){
 
   time_t timest;
   //router_t *vis = NULL;
-  msg_t *mensg = NULL;
+  msg_t mensg[MAX_PARENT];
   //msg_t aux;
-  DistVector_t *vetor = NULL;
-  int vizinhos = 0;
-  int i;
+ 
+  //int vizinhos = 0;
+  int i,j;
   int *vet;
   int id = 1;
   vetor = (DistVector_t *)malloc(sizeof(DistVector_t));
-  vetor->dist = (int *)malloc(sizeof(int)*vertices);
-  vetor->router = (int *)malloc(sizeof(int)*vertices);
+  //vetor->dist = (int *)malloc(sizeof(int)*vertices);
+  //vetor->router = (int *)malloc(sizeof(int)*vertices);
   vetor = initDV2(vetor); //inicializa todo mundo com infinito
   vetor->dist[myRouter->id-1] = 0;
   vetor->router[myRouter->id-1] = myRouter->id;//distancia para mim mesmo é zero
@@ -188,17 +221,23 @@ void SendDV(void){
   }
   //myConnect->alterado = 0;
   //printf("vv: %d %d %d ~  \n", vet[0], myConnect->idVizinho[0],vizinhos);
-  mensg = (msg_t *)malloc(sizeof(msg_t)*vizinhos);
-  
-  for( i = 0; i < vizinhos; i++){
-	  mensg[i] = initDV(mensg[i], vet[i],id++);
-	  mensg[i].DV = vetor;
-   }
-  /* for( i =0 ; i < vertices; i++){
+  //mensg = (msg_t *)malloc(sizeof(msg_t)*vizinhos);
+  //puts("oi");
+  for(i = 0; i < vizinhos; i++){
+	//DistVector_t *vector = (DistVector_t *)malloc(sizeof(DistVector_t));
+	for(j = 0; j < vertices; j++){
+		mensg[i].DV.dist[j] = vetor->dist[j];
+		mensg[i].DV.router[j] = vetor->router[j];
+	}
+	mensg[i] = initDV(mensg[i], vet[i],id++);
+	 
+ }
+  free(vet);
+   //for( i =0 ; i < vizinhos; i++){
+	    // printf("destg :%d \n", mensg[i].destino);
+	  // printf("%d e %d %d\n", mensg[0].DV->router[i], mensg[0].DV->dist[i],mensg[0].destino);
 	   
-	   printf("%d e %d %d\n", mensg[0].DV->router[i], mensg[0].DV->dist[i],mensg[0].destino);
-	   
-   }*/
+////   }
 	//printf("id %d dest %d e %d\n",mensg[2].origem,mensg[2].destino,mensg[2].DV->dist[1]);
 	//printf("cheguei");
   
@@ -214,6 +253,7 @@ void SendDV(void){
   timest = time(0);
   while(1){
 	  usleep(500000);
+	  //msg_t *conf = (msg_t *)malloc(sizeof(msg_t));
 	  //timestamp = time(0);]
 	  //printf("ddddd %d",cc++);
 	  pthread_mutex_lock(&count_mutex);
@@ -221,14 +261,20 @@ void SendDV(void){
 	  //double tempo = difftime(time(0), timest);
 	  double tempo = difftime(time(0), timest);//printf("%lf ", tempo);
 	  if(myConnect->alterado == 1){//printf("dddddx");
-		  puts("entreeei");
+		 // puts("entreeei");
 		  vetor = atualizaDV(vetor);
 		  if(!filas)
 			if(!iniciaFila())return;
 		    
 		  for( i = 0; i < vizinhos; i++){
+			    for(j = 0; j < vertices; j++){
+					mensg[i].DV.dist[j] = vetor->dist[j];
+					mensg[i].DV.router[j] = vetor->router[j];
+				}		
 				mensg[i].idMsg = id++;
+				
 				insereFila(&mensg[i]);
+				printf("Roteador : %d enviando pacote DV #%d para roteador %d\n", myRouter->id,mensg[i].idMsg, mensg[i].destino);
 			}
 		  timest = time(0);
 		  
@@ -262,8 +308,11 @@ void SendDV(void){
 			
 			for( i = 0; i < vizinhos; i++){
 				mensg[i].idMsg = id++;
-				
+				//conf = copyData(conf,&mensg[i]); 
 				insereFila(&mensg[i]);
+				
+				//printf("des :%d e %d \n", filas[tamanho-1].mesg->destino, tamanho);
+				//puts("ok");
 				//printf("%d e %d %d\n", mensg[i].DV->router[0], mensg[i].DV->dist[0],mensg[i].destino);
 				//printf("des :%d e %d ", mensg[i].destino, tamanho);
 				//if(tamanho == 3){
@@ -275,8 +324,10 @@ void SendDV(void){
 			
 			//insereFila(&mensg);
 			timest= time(0);
+			// printf("teste :%d", teste++);
 			
 	  }
+	 
 	  pthread_mutex_unlock(&count_mutex);
   }
   //close(s);
@@ -331,10 +382,10 @@ void enviarMsg(void){
 					mensg.tipo = 1;
 					mensg.origem = myRouter->id;
 					mensg.destino = destino;
-					mensg.nextH = myConnect[myRouter->id-1].idImediato[i];
+					mensg.nextH = myConnect->idImediato[i];
 					mensg.ack = 0;
 					mensg.pSize = 0;
-					mensg.DV = NULL;
+					//mensg.DV = NULL;
 					strcpy(mensg.ip, destRouter->ip);
 					break;
 				}
@@ -413,7 +464,7 @@ int encaminhaMsg(int s, struct sockaddr_in *etc, msg_t *buf, int flag){
 			}
 		}
 	} 
-	
+	//printf("porrt %d", destRouter->port);
 	
 	etc->sin_port = htons(destRouter->port); //especifica a porta do socket
 	
@@ -428,11 +479,11 @@ int encaminhaMsg(int s, struct sockaddr_in *etc, msg_t *buf, int flag){
 	}
 	if(!buf->ack && buf->tipo == 1) //define os formatos de msg de apresentação para o usuário
 		printf("\nRoteador : %d encaminhando msg #%d de %d bytes para roteador : %d\n", myRouter->id,buf->idMsg, (int )strlen(buf->text),destRouter->id); 
-	else if(!buf->ack && buf->tipo == 2 && flag == 0)
-		printf("Roteador : %d enviando pacote DV #%d para roteador %d\n", myRouter->id,buf->idMsg, destRouter->id); 
+	//else if(!buf->ack && buf->tipo == 2 && flag == 0)
+		//printf("Roteador : %d enviando pacote DV #%d para roteador %d\n", myRouter->id,buf->idMsg, destRouter->id); 
 	//else if(flag == 0)
 		//printf("\nRoteador : %d enviando confirmacao de pacote #%d para rot. %d\n", myRouter->id, buf->idMsg, destRouter->id);
-	
+	//puts("aq14");
 	free(destRouter);
 	return 1;
 	
@@ -485,14 +536,16 @@ void server(void){ //Para receber as mensagens
 		
 		fflush(stdout);
 		memset((char *)&mensg, 0, sizeof(msg_t));
+		//mensg.DV = NULL;
 		
 		if ((recv_len = recvfrom(s, &mensg, sizeof(msg_t), 0, (struct sockaddr *)&si_other, &len)) == -1) {
 			printf("recvfrom() ");
 			exit(1);
 		}
-		printf("au mmmm %d --- \n", mensg.DV->router[3]);
-		pthread_mutex_lock(&count_mutex); //Acesso único também a partir deste ponto
+		//printf("au mmmm %d %d %d --- \n" , mensg.origem, mensg.destino, mensg.nextH);
 		
+		pthread_mutex_lock(&count_mutex); //Acesso único também a partir deste ponto
+		//puts("oi");
 		
 		if(mensg.tipo == 2){ //mensagem de dv
 			
@@ -501,10 +554,10 @@ void server(void){ //Para receber as mensagens
 				//msg_t *conf = (msg_t *)malloc(sizeof(msg_t));
 				
 				for(i = 0 ; i < vertices; i++){
-					printf("%d %d %d %d ..\n", mensg.DV->router[i], mensg.DV->dist[i], mensg.DV->dist[myRouter->id-1],myConnect->custo[i]);
-					if(mensg.DV->router[i] != INFINITO && mensg.DV->router[i]!= myRouter->id) {
+					//printf("%d %d %d %d ..\n", mensg.DV.router[i], mensg.DV.dist[i], mensg.DV.dist[myRouter->id-1],myConnect->custo[i]);
+					if(mensg.DV.router[i] != INFINITO && mensg.DV.router[i]!= myRouter->id) {
 						
-						if( (temp = mensg.DV->dist[i] + mensg.DV->dist[myRouter->id-1]) < myConnect->custo[i]){puts("ok");
+						if( (temp = mensg.DV.dist[i] + mensg.DV.dist[myRouter->id-1]) < myConnect->custo[i]){
 							myConnect->custo[i] = temp;
 							myConnect->idImediato[i] = mensg.origem;
 							myConnect->alterado = 1;
@@ -512,7 +565,9 @@ void server(void){ //Para receber as mensagens
 					}
 		
 				}
-				printf("Pacote DV #%d recebido do rot. %d\n", mensg.idMsg, mensg.origem);
+				if(myConnect->alterado == 1 )
+					printf("Pacote DV #%d recebido do rot. %d\n", mensg.idMsg, mensg.origem);
+				//printf("Pacote DV #%d recebido do rot. %d\n", mensg.idMsg, mensg.origem);
 				//mensg.ack = 1;
 				//mensg.nextH = mensg.origem;
 				//mensg.origem = mensg.destino;
@@ -623,49 +678,45 @@ void serverControl(){
 		if(tamanho == 0)continue; //fila vazia
 	//puts("umm");printf("r  u %d ", tamanho);
 	
-		
+		pthread_mutex_lock(&count_mutex);
 		for(i = 0; i < tamanho; i++){
 			
 
 			msg_t *conf = (msg_t *)malloc(sizeof(msg_t));
 			if(filas[i].mesg->ack){ //caso recebeu o pacote
-				encaminhaMsg(s,&controle,filas[i].mesg,filas[i].tentativas); //manda ack e remove da fila
+				encaminhaMsg(s,&controle,filas[0].mesg,filas[0].tentativas); //manda ack e remove da fila
 				remove_f();
 			}
-			else if(filas[i].tentativas == 0){ //se a mensagem nao foi enviada, ou seja, veio do usuario
-				
-				if(encaminhaMsg(s,&controle,filas[i].mesg,filas[i].tentativas)==0){
+			else if(filas[0].tentativas == 0){ //se a mensagem nao foi enviada, ou seja, veio do usuario
+				int val = encaminhaMsg(s,&controle,filas[0].mesg,filas[0].tentativas);
+				if(!val || filas[0].mesg->tipo == 2){
+					
 					remove_f();//caso deu erro, apenas remove
-				}
-				else if(filas[i].mesg->tipo == 2){
-		//			printf("dd:%d ", filas[i].mesg->destino);
-					printf("rrrrrr : %d", filas[i].mesg->DV->router[3]);
-					remove_f();printf("\n");
 					
 				}
 				else{
 					
-					filas[i].tentativas++; //incrementa o numero de tentativas
-					filas[i].timestamp = time(0); //conta o tempo a partir de agora
-					save = filas[i].tentativas;
-					saveId = filas[i].id; //copia em variaveis auxiliares
-					back = filas[i].timestamp;
-					conf = copyData(conf, filas[i].mesg);//copia para estrutura dinâmica
+					filas[0].tentativas++; //incrementa o numero de tentativas
+					filas[0].timestamp = time(0); //conta o tempo a partir de agora
+					save = filas[0].tentativas;
+					saveId = filas[0].id; //copia em variaveis auxiliares
+					back = filas[0].timestamp;
+					conf = copyData(conf, filas[0].mesg);//copia para estrutura dinâmica
 					
-					if(filas[i].mesg->tipo == 1){//se nao for mensagem do atualizado do DV
+					if(filas[0].mesg->tipo == 1){//se nao for mensagem do atualizado do DV
 						remove_f();
 						insere_fix(conf, save, saveId, back);//tem efeito de pegar o primeiro e colocar por último na fila, mantendo os atributos
 					}
 				}
 			
 			}
-			else if(filas[i].tentativas > 0 && filas[i].tentativas < MAX_TENTATIVAS){
-				double tempo = difftime(time(0), filas[i].timestamp);
+			else if(filas[0].tentativas > 0 && filas[0].tentativas < MAX_TENTATIVAS){
+				double tempo = difftime(time(0), filas[0].timestamp);
 			 
-				 if(filas[i].tentativas < MAX_TENTATIVAS && tempo > TIMEOUT){ //max 3 tentativas
-					if(filas[i].mesg->tipo == 1)
+				 if(filas[0].tentativas < MAX_TENTATIVAS && tempo > TIMEOUT){ //max 3 tentativas
+					if(filas[0].mesg->tipo == 1)
 						printf("\nRetransmissao\n");
-					if(encaminhaMsg(s,&controle, filas[i].mesg,filas[i].tentativas)==0){
+					if(encaminhaMsg(s,&controle, filas[0].mesg,filas[0].tentativas)==0){
 						remove_f();
 					}
 					else{
@@ -673,24 +724,24 @@ void serverControl(){
 						//filas[i].timestamp = time(0);
 						filas[i].tentativas++;
 						back = time(0);
-						save = filas[i].tentativas;
-						saveId = filas[i].id;
-						conf = copyData(conf,filas[i].mesg);
+						save = filas[0].tentativas;
+						saveId = filas[0].id;
+						conf = copyData(conf,filas[0].mesg);
 						
-						if(filas[i].mesg->tipo == 1){//se nao for mensagem de atualizacao DV
+						if(filas[0].mesg->tipo == 1){//se nao for mensagem de atualizacao DV
 							remove_f();
 							insere_fix(conf,save,saveId,back); //coloca no final da fila
 						}
 					 }
 				 }
-				else if(filas[i].tentativas < MAX_TENTATIVAS && tempo <= TIMEOUT){ //Aprox 2s
+				else if(filas[0].tentativas < MAX_TENTATIVAS && tempo <= TIMEOUT){ //Aprox 2s
 					// encaminhaMsg(s,&controle, filas[i].mesg);
-					 conf = copyData(conf,filas[i].mesg);
-					 save = filas[i].tentativas;
-					 back = filas[i].timestamp;
-					 saveId = filas[i].id;
+					 conf = copyData(conf,filas[0].mesg);
+					 save = filas[0].tentativas;
+					 back = filas[0].timestamp;
+					 saveId = filas[0].id;
 					 
-					 if(filas[i].mesg->tipo == 1){//se nao for msg de DV
+					 if(filas[0].mesg->tipo == 1){//se nao for msg de DV
 						remove_f();
 						insere_fix(conf,save,saveId,back); //coloca no final da fila
 						//total aproximadamente de 6s para tentar enviar
@@ -698,7 +749,7 @@ void serverControl(){
 				 }
 			}
 			else{
-				if(filas[i].mesg->tipo == 1)
+				if(filas[0].mesg->tipo == 1)
 					printf("\nNao foi possivel encaminhar a mensagem\n");
 					//if(filas[i].mesg->DV)puts("DV OK");
 				else printf("\n");
@@ -712,6 +763,7 @@ void serverControl(){
 	close(s);
 	pthread_exit(NULL);
 }
+
 
 /**
  * @function copyData - faz a copia de dois pacotes
@@ -729,14 +781,20 @@ msg_t *copyData(msg_t *new, msg_t *buf){
 	new->destino = buf->destino;
 	new->nextH = buf->nextH;
 	strcpy(new->ip, buf->ip);
-	strcpy(new->text, buf->text);
+	if(buf->tipo==1)strcpy(new->text, buf->text);
+	
 	new->ack = buf->ack;
 	new->idMsg = buf->idMsg;
 	new->pSize = buf->pSize;
-	if(buf->tipo == 2)
-		new->DV = buf->DV;
-	for(i = 0 ; i < MAX_PARENT; i++)
-		new->parent[i] = buf->parent[i];
+	if(buf->tipo == 2){
+		for(i = 0; i < vertices; i++){
+			new->DV.dist[i] = buf->DV.dist[i];
+			new->DV.router[i] = buf->DV.router[i];
+		}
+		
+	}else
+		for(i = 0 ; i < vertices; i++)
+			new->parent[i] = buf->parent[i];
 
 
 	
@@ -771,7 +829,7 @@ int iniciaFila(){
 void insereFila(msg_t *buf){
 	//puts("eu");
 	msg_t *nova = (msg_t *)malloc(sizeof(msg_t));
-	int i;
+	//int i;
 	
 	if(!filas){
 		printf("Impossivel inserir. Problema com a fila\n");
@@ -816,6 +874,7 @@ void insereFila(msg_t *buf){
 			//printf("dd;;>%d ", filas[tamanho].mesg->destino);
 		//}
 		tamanho++;//tamanho global da fila
+		teste = tamanho;
 	}
 }
 
@@ -834,10 +893,10 @@ void insereFila(msg_t *buf){
  * 
  * 
  **/
-void insere_fix(msg_t *buf, int save, int saveID, time_t back){
+void insere_fix(msg_t *nova, int save, int saveID, time_t back){
 
 		
-	msg_t *nova = (msg_t *)malloc(sizeof(msg_t));
+	//msg_t *nova = (msg_t *)malloc(sizeof(msg_t));
 	
 	if(!filas){
 		printf("Impossivel inserir. Problema com a fila\n");
@@ -848,7 +907,7 @@ void insere_fix(msg_t *buf, int save, int saveID, time_t back){
 		return;
 	}
 	else{
-		nova = copyData(nova,buf);
+		//nova = copyData(nova,buf);
 		
 		filas[tamanho].mesg = nova;
 		filas[tamanho].id = saveID;
@@ -869,11 +928,16 @@ void remove_f(){
 		//if(filas[0].mesg->DV)
 		//	free(filas[0].mesg->DV);
 		//puts("onde1");
+		//printf("como %d %d %d\n", teste,tamanho,filas[0].mesg->destino);
+		//puts("aq2");
 	free(filas[0].mesg); //libera espaço
+	//puts("aq23");
 	filas[0].mesg = NULL; 
 	//puts("onde2");
 	for(i = 1; i < tamanho; i++){
 		filas[i-1].mesg = filas[i].mesg;
+		//filas[i-1].tentativas = filas[i].tentativas;
+		//filas[i-1].timestamp = filas[i].timestamp;
 	}
 	tamanho--;
 	//puts("onde3");
@@ -900,6 +964,7 @@ void remove_fix(int i){
 		//puts("aqui");
 		
 		//free(filas[0].mesg);
+		//puts("aq");
 		free(filas[i].mesg); 
 		filas[i].mesg = NULL;
 		tamanho--;
@@ -908,7 +973,7 @@ void remove_fix(int i){
 	else{ //caso for algum intermediario
 		//puts("xomo");
 		for(j = i; j < tamanho-1; j++){
-			
+			//puts("aq1");
 			free(filas[j].mesg);
 			filas[j].mesg = filas[j+1].mesg;
 			
@@ -965,10 +1030,13 @@ int main(int argc, char *arq[]){
   pthread_join(tids[3], NULL);*/
   
   //pthread_join(tids[2], NULL);
-  pthread_join(tids[1], NULL);
-  pthread_cancel(tids[0]);
-  pthread_cancel(tids[3]);
   pthread_join(tids[0], NULL);
+  pthread_cancel(tids[1]);
+  pthread_cancel(tids[3]);
+  pthread_join(tids[1], NULL);
+  //pthread_cancel(tids[0]);
+  pthread_cancel(tids[3]);
+  //pthread_join(tids[0], NULL);
   pthread_join(tids[3], NULL);
   //pthread_join(tids[2], NULL);
   //pthread_join(tids[3], NULL);
