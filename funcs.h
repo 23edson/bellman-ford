@@ -5,11 +5,11 @@
 #define CONST 40 //constante para tamanho de arquivo
 #define IP 15 //constante do ip
 #define MAX_PARENT 100 //vetor de pais tamanho fixo
-#define MAXFILA 50 //tamanho máximo da fila 
+#define MAXFILA 100//tamanho máximo da fila 
 #define MAX_TENTATIVAS 3 //número max de tentativas após timeout
 #define TIMEOUT 2 //temporizador
 #define INFINITO 999 //representacao do infinito
-#define MAX_TIME_DV 5 
+#define MAX_TIME_DV 15
 //tabela de roteamento
 
 /**
