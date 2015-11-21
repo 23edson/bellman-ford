@@ -9,7 +9,7 @@
 #define MAX_TENTATIVAS 3 //número max de tentativas após timeout
 #define TIMEOUT 2 //temporizador
 #define INFINITO 999 //representacao do infinito
-#define MAX_TIME_DV 15
+#define MAX_TIME_DV 7
 //tabela de roteamento
 
 /**

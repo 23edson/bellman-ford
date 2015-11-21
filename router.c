@@ -194,7 +194,11 @@ void SendDV(void){
 	  mensg[i] = initDV(mensg[i], vet[i],id++);
 	  mensg[i].DV = vetor;
    }
-   
+  /* for( i =0 ; i < vertices; i++){
+	   
+	   printf("%d e %d %d\n", mensg[0].DV->router[i], mensg[0].DV->dist[i],mensg[0].destino);
+	   
+   }*/
 	//printf("id %d dest %d e %d\n",mensg[2].origem,mensg[2].destino,mensg[2].DV->dist[1]);
 	//printf("cheguei");
   
@@ -209,13 +213,15 @@ void SendDV(void){
   //printf("vis %d ", vizinhos);
   timest = time(0);
   while(1){
-	  usleep(200000);
+	  usleep(500000);
 	  //timestamp = time(0);]
 	  //printf("ddddd %d",cc++);
 	  pthread_mutex_lock(&count_mutex);
 	  //printf("ddddd %d",cc++);
 	  //double tempo = difftime(time(0), timest);
-	  if(myConnect->alterado == 1){printf("dddddx");
+	  double tempo = difftime(time(0), timest);//printf("%lf ", tempo);
+	  if(myConnect->alterado == 1){//printf("dddddx");
+		  puts("entreeei");
 		  vetor = atualizaDV(vetor);
 		  if(!filas)
 			if(!iniciaFila())return;
@@ -226,11 +232,28 @@ void SendDV(void){
 			}
 		  timest = time(0);
 		  
+		  printf("----DV UPDATE---------\n");
+		  printf("     Rot : %d\n", myConnect->idVizinho[myRouter->id-1]);
+		  printf("----------------------\n");
+		  printf(" ROT.|   CUSTO\n");
+		  printf("     ------------------\n");
+		  for(i = 0 ; i < vertices; i++){
+			  
+			  if(myConnect->idVizinho[i] != myRouter->id){
+				if(myConnect->custo[i] == INFINITO)
+					printf("   %d |   INF \n", myConnect->idVizinho[i]);
+				else printf("   %d |    %d \n", myConnect->idVizinho[i], myConnect->custo[i]);
+
+			  }
+			  
+		  }
+		  printf("-----------------------\n");
+	
 	  }
 	  
-	 double tempo = difftime(time(0), timest);//printf("%lf ", tempo);
+	 
 	  
-	  if(tempo >= MAX_TIME_DV){//printf("rrr");
+	  else if(tempo >= MAX_TIME_DV){//printf("rrr");
 		    
 			if(!filas)
 				if(!iniciaFila())return;
@@ -241,11 +264,12 @@ void SendDV(void){
 				mensg[i].idMsg = id++;
 				
 				insereFila(&mensg[i]);
+				//printf("%d e %d %d\n", mensg[i].DV->router[0], mensg[i].DV->dist[0],mensg[i].destino);
 				//printf("des :%d e %d ", mensg[i].destino, tamanho);
-				if(tamanho == 3){
-					printf("des :%d e %d \n", filas[0].mesg->destino, tamanho);
-					printf("des :%d e %d \n", filas[1].mesg->destino, tamanho);
-					printf("des :%d e %d \n", filas[2].mesg->destino, tamanho);}
+				//if(tamanho == 3){
+					//printf("des :%d e %d \n", filas[0].mesg->destino, tamanho);
+					//printf("des :%d e %d \n", filas[1].mesg->destino, tamanho);
+					//printf("des :%d e %d \n", filas[2].mesg->destino, tamanho);}
 			}
 			
 			
@@ -397,7 +421,7 @@ int encaminhaMsg(int s, struct sockaddr_in *etc, msg_t *buf, int flag){
 		fprintf(stderr, "inet_aton() error\n");
 		return 0;
 	}
-	
+	//printf("rrrrrr : %d", buf->DV->router[3]);
 	if (sendto(s, buf, sizeof(msg_t), 0, (struct sockaddr *)etc, t) == -1) { //tenta enviar
 		printf("Nao foi possivel encaminhar a mensagem()...\n");
 		return 0;
@@ -466,26 +490,21 @@ void server(void){ //Para receber as mensagens
 			printf("recvfrom() ");
 			exit(1);
 		}
-		
+		printf("au mmmm %d --- \n", mensg.DV->router[3]);
 		pthread_mutex_lock(&count_mutex); //Acesso único também a partir deste ponto
 		
 		
 		if(mensg.tipo == 2){ //mensagem de dv
 			
-			for(i = 0; i < tamanho; i++){ //ignorar pacotes ja recebidos no caso de retransmissoes
-				
-				if(mensg.idMsg == filas[i].mesg->idMsg && mensg.nextH == myRouter->id){
-					flag = 1;
-					break;
-				}
-				
-			}
-			if(!flag){
+			
+			
 				//msg_t *conf = (msg_t *)malloc(sizeof(msg_t));
 				
-				for(i = 0 ; i < tamanho; i++){
+				for(i = 0 ; i < vertices; i++){
+					printf("%d %d %d %d ..\n", mensg.DV->router[i], mensg.DV->dist[i], mensg.DV->dist[myRouter->id-1],myConnect->custo[i]);
 					if(mensg.DV->router[i] != INFINITO && mensg.DV->router[i]!= myRouter->id) {
-						if( (temp = mensg.DV->dist[i] + myConnect->custo[mensg.DV->router[i]]) < myConnect->custo[i]){
+						
+						if( (temp = mensg.DV->dist[i] + mensg.DV->dist[myRouter->id-1]) < myConnect->custo[i]){puts("ok");
 							myConnect->custo[i] = temp;
 							myConnect->idImediato[i] = mensg.origem;
 							myConnect->alterado = 1;
@@ -499,8 +518,7 @@ void server(void){ //Para receber as mensagens
 				//mensg.origem = mensg.destino;
 				//conf = copyData(conf, &mensg);
 				//insereFila(conf);
-			}
-			flag = 0;
+			
 		}
 		
 		else{
@@ -603,9 +621,11 @@ void serverControl(){
 		usleep(500000);//espera 500ms
 
 		if(tamanho == 0)continue; //fila vazia
-
+	//puts("umm");printf("r  u %d ", tamanho);
+	
+		
 		for(i = 0; i < tamanho; i++){
-			pthread_mutex_lock(&count_mutex); //acesso de fila 
+			
 
 			msg_t *conf = (msg_t *)malloc(sizeof(msg_t));
 			if(filas[i].mesg->ack){ //caso recebeu o pacote
@@ -618,8 +638,10 @@ void serverControl(){
 					remove_f();//caso deu erro, apenas remove
 				}
 				else if(filas[i].mesg->tipo == 2){
-					printf("dd:%d ", filas[i].mesg->destino);
+		//			printf("dd:%d ", filas[i].mesg->destino);
+					printf("rrrrrr : %d", filas[i].mesg->DV->router[3]);
 					remove_f();printf("\n");
+					
 				}
 				else{
 					
@@ -682,10 +704,10 @@ void serverControl(){
 				else printf("\n");
 				remove_f(); //Desiste de enviar
 			}
-			pthread_mutex_unlock(&count_mutex);
+			
 
 		}
-
+		pthread_mutex_unlock(&count_mutex);
 	}
 	close(s);
 	pthread_exit(NULL);
@@ -763,7 +785,7 @@ void insereFila(msg_t *buf){
 		nova = copyData(nova,buf);
 	
 		//filas[tamanho].mesg = nova;
-		if(nova->tipo == 2 && tamanho > 0){ //desloca uma posicao para direita(DV tem prioridade)
+		/*if(nova->tipo == 2 && tamanho > 0){ //desloca uma posicao para direita(DV tem prioridade)
 			
 			for(i = tamanho -1; i >=0; i--){
 				//puts("eu");
@@ -778,8 +800,8 @@ void insereFila(msg_t *buf){
 			filas[0].timestamp = filas[tamanho-1].tentativas =0;
 			filas[0].mesg = nova;
 			
-		}
-		else{
+		}*/
+		//else{
 			filas[tamanho].mesg = nova;
 			if(tamanho == 0){
 				filas[tamanho].id = 1; //primeiro pacote tem id=1 
@@ -791,8 +813,8 @@ void insereFila(msg_t *buf){
 				filas[tamanho].id = filas[tamanho-1].id+1; //id incremental a partir de 1
 				filas[tamanho].timestamp = filas[tamanho].tentativas =0;
 			}
-			
-		}
+			//printf("dd;;>%d ", filas[tamanho].mesg->destino);
+		//}
 		tamanho++;//tamanho global da fila
 	}
 }
@@ -912,12 +934,17 @@ int main(int argc, char *arq[]){
   //Lê informações sobre este roteador ( id, porta, ip)   
   if(!(myRouter = leInfos(rout_u, routerId))) return 0;
   
- /* int i;
+ int i;
   
   for(i = 0; i < vertices; i++){
 	  printf("%d %d %d\n", myConnect->idVizinho[i],myConnect->custo[i],myConnect->idImediato[i]);
 	  
-  }*/
+  }
+ 
+
+  
+  	  
+  
   //cria 3 threads para controlar o roteador
  //printf("%d", MAXFILA);
   pthread_create(&tids[0], NULL, (void *)server, NULL); //server que recebe os pacotes
