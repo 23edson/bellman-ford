@@ -91,12 +91,33 @@ int tamanho = 0;//controle da fila, inicialmente vazia.
 tabela_t *myConnect = NULL; //lista de roteamento
 router_t *myRouter = NULL; //informações do roteador
 fila_t *filas = NULL;
- DistVector_t *vetor = NULL;
-int teste =0 ;
+DistVector_t *vetor = NULL;
+msg_t mensger[MAX_PARENT];
+time_t *nodeTime;
+
 char rout_u[20] = "roteador.config"; //Arquivo de configuração dos roteadores;
 char link_u[20] = "enlaces.config"; //Arquivo de conf. dos enlaces;
 
 pthread_mutex_t count_mutex = PTHREAD_MUTEX_INITIALIZER; //mutex para controlar o acesso as variáveis globais
+
+void printTime(){
+	
+	int i;
+    time_t ltime; /* calendar time */
+    ltime=time(NULL); /* get current time */
+    char *tempo = (char *)malloc(sizeof(char)*30);
+    //strcpy(tempo, "Time : ");
+    tempo = asctime( localtime(&ltime) );
+    for(i = 11; i < 20; i++){
+		if( i == 11)
+			printf("  Time : ");
+		printf("%c",tempo[i]);
+	}
+	printf("\n");
+	//free(tempo);
+	
+}
+
 
 DistVector_t *atualizaDV(DistVector_t *vector){
 	
@@ -187,15 +208,40 @@ msg_t initDV(msg_t me, int who,int id){
 	  mensg[i].DV = vetor;
    }
 }*/
+
+void imprimeTabela(){
+	
+	int i;
+	
+	printf("----DV UPDATE---------\n");
+	printTime();
+    printf("     Rot : %d\n", myConnect->idVizinho[myRouter->id-1]);
+	printf("----------------------\n");
+	printf(" ROT.|   CUSTO\n");
+	printf("     ------------------\n");
+		for(i = 0 ; i < vertices; i++){
+			  
+			if(myConnect->idVizinho[i] != myRouter->id){
+				if(myConnect->custo[i] == INFINITO)
+					printf("   %d |   INF \n", myConnect->idVizinho[i]);
+				else printf("   %d |    %d \n", myConnect->idVizinho[i], myConnect->custo[i]);
+
+			  }
+			  
+		}
+	printf("-----------------------\n");
+}
+
 void SendDV(void){
 
   time_t timest;
+ 
   //router_t *vis = NULL;
-  msg_t mensg[MAX_PARENT];
+  
   //msg_t aux;
  
   //int vizinhos = 0;
-  int i,j;
+  int i,j,k;
   int *vet;
   int id = 1;
   vetor = (DistVector_t *)malloc(sizeof(DistVector_t));
@@ -208,6 +254,7 @@ void SendDV(void){
   
   vet = (int *)malloc(sizeof(int)*vertices);
   
+  
   for(i = 0; i < vertices; i++){
 	  //vetor->dist[i] = INFINITO;
 	  //vetor->router[i] = INFINITO;
@@ -219,25 +266,25 @@ void SendDV(void){
 			
 		}
   }
+  nodeTime = (time_t *)malloc(sizeof(time_t)*vizinhos);
   //myConnect->alterado = 0;
   //printf("vv: %d %d %d ~  \n", vet[0], myConnect->idVizinho[0],vizinhos);
   //mensg = (msg_t *)malloc(sizeof(msg_t)*vizinhos);
   //puts("oi");
+  
   for(i = 0; i < vizinhos; i++){
 	//DistVector_t *vector = (DistVector_t *)malloc(sizeof(DistVector_t));
 	for(j = 0; j < vertices; j++){
-		mensg[i].DV.dist[j] = vetor->dist[j];
-		mensg[i].DV.router[j] = vetor->router[j];
+		mensger[i].DV.dist[j] = vetor->dist[j];
+		mensger[i].DV.router[j] = vetor->router[j];
 	}
-	mensg[i] = initDV(mensg[i], vet[i],id++);
+	mensger[i] = initDV(mensger[i], vet[i],id++);
+	nodeTime[i]= time(0);
+	//mensger[i].ack = (int)time(0);
 	 
  }
   free(vet);
-   //for( i =0 ; i < vizinhos; i++){
-	    // printf("destg :%d \n", mensg[i].destino);
-	  // printf("%d e %d %d\n", mensg[0].DV->router[i], mensg[0].DV->dist[i],mensg[0].destino);
-	   
-////   }
+   
 	//printf("id %d dest %d e %d\n",mensg[2].origem,mensg[2].destino,mensg[2].DV->dist[1]);
 	//printf("cheguei");
   
@@ -252,7 +299,7 @@ void SendDV(void){
   //printf("vis %d ", vizinhos);
   timest = time(0);
   while(1){
-	  usleep(500000);
+	  usleep(500000);//500ms
 	  //msg_t *conf = (msg_t *)malloc(sizeof(msg_t));
 	  //timestamp = time(0);]
 	  //printf("ddddd %d",cc++);
@@ -267,33 +314,20 @@ void SendDV(void){
 			if(!iniciaFila())return;
 		    
 		  for( i = 0; i < vizinhos; i++){
-			    for(j = 0; j < vertices; j++){
-					mensg[i].DV.dist[j] = vetor->dist[j];
-					mensg[i].DV.router[j] = vetor->router[j];
-				}		
-				mensg[i].idMsg = id++;
-				
-				insereFila(&mensg[i]);
-				printf("Roteador : %d enviando pacote DV #%d para roteador %d\n", myRouter->id,mensg[i].idMsg, mensg[i].destino);
-			}
-		  timest = time(0);
-		  
-		  printf("----DV UPDATE---------\n");
-		  printf("     Rot : %d\n", myConnect->idVizinho[myRouter->id-1]);
-		  printf("----------------------\n");
-		  printf(" ROT.|   CUSTO\n");
-		  printf("     ------------------\n");
-		  for(i = 0 ; i < vertices; i++){
-			  
-			  if(myConnect->idVizinho[i] != myRouter->id){
-				if(myConnect->custo[i] == INFINITO)
-					printf("   %d |   INF \n", myConnect->idVizinho[i]);
-				else printf("   %d |    %d \n", myConnect->idVizinho[i], myConnect->custo[i]);
-
+			  if(mensger[i].tipo == 2){
+					for(j = 0; j < vertices; j++){
+						mensger[i].DV.dist[j] = vetor->dist[j];
+						mensger[i].DV.router[j] = vetor->router[j];
+					}		
+					mensger[i].idMsg = id++;
+					//nodeTime[i] = time(0);
+					insereFila(&mensger[i]);
+					printf("Roteador : %d enviando pacote DV #%d para roteador %d\n", myRouter->id,mensger[i].idMsg, mensger[i].destino);
 			  }
-			  
 		  }
-		  printf("-----------------------\n");
+		  timest = time(0);
+		  imprimeTabela();
+		  
 	
 	  }
 	  
@@ -305,11 +339,30 @@ void SendDV(void){
 				if(!iniciaFila())return;
 				
 			//if(filas[i].exists 
-			
+		/*	for( i = 0; i < vizinhos; i++){
+				mensger[i].idMsg = id++;
+				insereFila(&mensger[i]);
+			}
+			timest= time(0);
+	}*/
 			for( i = 0; i < vizinhos; i++){
-				mensg[i].idMsg = id++;
-				//conf = copyData(conf,&mensg[i]); 
-				insereFila(&mensg[i]);
+				
+				//time_t aux = (time_t)mensger[i].ack;
+				tempo = difftime(time(0), nodeTime[i]);
+				if( tempo >= MAX_TIME_DV*MAX_TENTATIVAS){
+					mensger[i].tipo = 0;
+					myConnect->custo[mensger[i].destino-1] = INFINITO;
+					//nodeTime[i] = time(0);
+					//mensger[i].ack = (int)time(0);
+					for(j = 0; j < vizinhos; j++){
+						mensger[j].DV.dist[mensger[i].destino-1] = INFINITO;
+						mensger[j].DV.router[mensger[i].destino-1] = INFINITO; 
+					}
+				}
+				//conf = copyData(conf,&mensg[i]);
+				else{
+					mensger[i].idMsg = id++;
+				insereFila(&mensger[i]);}
 				
 				//printf("des :%d e %d \n", filas[tamanho-1].mesg->destino, tamanho);
 				//puts("ok");
@@ -490,6 +543,7 @@ int encaminhaMsg(int s, struct sockaddr_in *etc, msg_t *buf, int flag){
 }
 
 
+
 /**
  * @function server - Representa o servidor responsável por receber os pacotes enviaos atráves do socket.
  * 
@@ -505,7 +559,7 @@ int encaminhaMsg(int s, struct sockaddr_in *etc, msg_t *buf, int flag){
 
 void server(void){ //Para receber as mensagens
 	
-	int s,temp, recv_len,i,flag = 0;
+	int s,temp, recv_len,i,j,flag = 0;
 	struct sockaddr_in si_me, si_other;
 	socklen_t len;
 	msg_t mensg;
@@ -549,15 +603,38 @@ void server(void){ //Para receber as mensagens
 		
 		if(mensg.tipo == 2){ //mensagem de dv
 			
-			
+				printf("\n");
+					for(i = 0; i < vertices; i++){
+						printf("%d ", mensg.DV.router[i]);
+						printf("%d \n", mensg.DV.dist[i]);
+					}
 			
 				//msg_t *conf = (msg_t *)malloc(sizeof(msg_t));
 				
 				for(i = 0 ; i < vertices; i++){
 					//printf("%d %d %d %d ..\n", mensg.DV.router[i], mensg.DV.dist[i], mensg.DV.dist[myRouter->id-1],myConnect->custo[i]);
 					if(mensg.DV.router[i] != INFINITO && mensg.DV.router[i]!= myRouter->id) {
+						temp = mensg.DV.dist[i] + mensg.DV.dist[myRouter->id-1];
 						
-						if( (temp = mensg.DV.dist[i] + mensg.DV.dist[myRouter->id-1]) < myConnect->custo[i]){
+						for(j = 0; j < vizinhos; j++){
+							if(mensger[j].destino == mensg.origem){
+								nodeTime[j] = time(0);
+								break;
+							}
+						}
+						if(j < vizinhos)
+							if(mensg.DV.router[i] != INFINITO && mensger[j].tipo == 0)
+								mensger[j].tipo = 2;
+						
+						if(mensg.DV.router[i] == myConnect->idVizinho[i] && myConnect->idImediato[i] == mensg.origem){
+							if(myConnect->custo[i] != temp){
+								myConnect->custo[i] = temp;
+								//myConnect->idImediato[i] = mensg.origem;
+								myConnect->alterado = 1;
+							}
+						}
+						
+						else if( (temp  < myConnect->custo[i])){
 							myConnect->custo[i] = temp;
 							myConnect->idImediato[i] = mensg.origem;
 							myConnect->alterado = 1;
@@ -567,6 +644,7 @@ void server(void){ //Para receber as mensagens
 				}
 				if(myConnect->alterado == 1 )
 					printf("Pacote DV #%d recebido do rot. %d\n", mensg.idMsg, mensg.origem);
+					
 				//printf("Pacote DV #%d recebido do rot. %d\n", mensg.idMsg, mensg.origem);
 				//mensg.ack = 1;
 				//mensg.nextH = mensg.origem;
@@ -752,7 +830,7 @@ void serverControl(){
 				if(filas[0].mesg->tipo == 1)
 					printf("\nNao foi possivel encaminhar a mensagem\n");
 					//if(filas[i].mesg->DV)puts("DV OK");
-				else printf("\n");
+				
 				remove_f(); //Desiste de enviar
 			}
 			
@@ -874,7 +952,7 @@ void insereFila(msg_t *buf){
 			//printf("dd;;>%d ", filas[tamanho].mesg->destino);
 		//}
 		tamanho++;//tamanho global da fila
-		teste = tamanho;
+		//teste = tamanho;
 	}
 }
 
@@ -1007,7 +1085,7 @@ int main(int argc, char *arq[]){
   }
  
 
-  
+  imprimeTabela();
   	  
   
   //cria 3 threads para controlar o roteador
