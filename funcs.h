@@ -22,7 +22,9 @@
  * 
  **/
 typedef struct tab{
+  
   int alterado;
+  int *enlace;
   int *idVizinho; //vertice
   int *custo;   //custo minimo
   int *idImediato; //proximo vertice no caminho até idVizinho

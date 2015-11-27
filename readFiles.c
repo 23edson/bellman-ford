@@ -50,7 +50,8 @@ tabela_t *leEnlaces( char enl[CONST], int count, int myId){
   
   if(!(myConnect->idVizinho = (int *)malloc(sizeof(int)*(count))) ||
      (!(myConnect->custo = (int *)malloc(sizeof(int)*(count)))) ||
-     (!(myConnect->idImediato = (int *)malloc(sizeof(int)*(count)))))
+     (!(myConnect->idImediato = (int *)malloc(sizeof(int)*(count))))||
+     (!(myConnect->enlace = (int *)malloc(sizeof(int)*(count)))))
       return NULL;
   
   
@@ -64,12 +65,14 @@ tabela_t *leEnlaces( char enl[CONST], int count, int myId){
 	  myConnect->idVizinho[i] = i+1;
 	  myConnect->custo[i] = INFINITO;
 	  myConnect->idImediato[i] = i+1;
+	  myConnect->enlace[i] = 0;
 	  
   }
   //custo para si mesmo é zero    
   myConnect->idVizinho[myId-1] = myId; 
   myConnect->custo[myId-1] = 0;
   myConnect->idImediato[myId-1] = myId;
+  myConnect->enlace[myId-1] = 2;
   myConnect->alterado = 0;
   //lê arestas com respectivos custos
   while(fscanf(arq,"%d %d %d", &i, &adj, &custo) != EOF){
@@ -77,12 +80,13 @@ tabela_t *leEnlaces( char enl[CONST], int count, int myId){
 			myConnect->idVizinho[adj-1] = adj;
 			myConnect->custo[adj-1] = custo;
 			myConnect->idImediato[adj-1] = adj;
+			myConnect->enlace[adj-1] = 1;
 		}
 		else if( i != myId && adj == myId){
 			myConnect->idVizinho[i-1] = i;
 			myConnect->custo[i-1] = custo;
 			myConnect->idImediato[i-1] = i;
-			
+			myConnect->enlace[i-1] = 1;
 		}
   }
   fclose(arq);

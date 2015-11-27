@@ -89,11 +89,13 @@ DistVector_t *copyVector(DistVector_t *new, DistVector_t *buf);
 int vertices,vizinhos=0; // Número de vértices do grafo;
 int tamanho = 0;//controle da fila, inicialmente vazia.
 tabela_t *myConnect = NULL; //lista de roteamento
+tabela_t *myTable = NULL;
 router_t *myRouter = NULL; //informações do roteador
 fila_t *filas = NULL;
 DistVector_t *vetor = NULL;
 msg_t mensger[MAX_PARENT];
 time_t *nodeTime;
+int *tryVector, flag = 1;
 
 char rout_u[20] = "roteador.config"; //Arquivo de configuração dos roteadores;
 char link_u[20] = "enlaces.config"; //Arquivo de conf. dos enlaces;
@@ -266,7 +268,8 @@ void SendDV(void){
 			
 		}
   }
-  nodeTime = (time_t *)malloc(sizeof(time_t)*vizinhos);
+  //nodeTime = (time_t *)malloc(sizeof(time_t)*vizinhos);
+  tryVector = (int *)malloc(sizeof(int)*vizinhos);
   //myConnect->alterado = 0;
   //printf("vv: %d %d %d ~  \n", vet[0], myConnect->idVizinho[0],vizinhos);
   //mensg = (msg_t *)malloc(sizeof(msg_t)*vizinhos);
@@ -279,7 +282,8 @@ void SendDV(void){
 		mensger[i].DV.router[j] = vetor->router[j];
 	}
 	mensger[i] = initDV(mensger[i], vet[i],id++);
-	nodeTime[i]= time(0);
+	//nodeTime[i]= time(0);
+	tryVector[i] = 0;
 	//mensger[i].ack = (int)time(0);
 	 
  }
@@ -326,8 +330,11 @@ void SendDV(void){
 			  }
 		  }
 		  timest = time(0);
-		  imprimeTabela();
-		  
+		 
+			imprimeTabela();
+			
+		flag = 0;
+	  
 	
 	  }
 	  
@@ -348,21 +355,30 @@ void SendDV(void){
 			for( i = 0; i < vizinhos; i++){
 				
 				//time_t aux = (time_t)mensger[i].ack;
-				tempo = difftime(time(0), nodeTime[i]);
-				if( tempo >= MAX_TIME_DV*MAX_TENTATIVAS){
+				//tempo = difftime(time(0), nodeTime[i]);
+				if(tryVector[i] > MAX_TENTATIVAS){
+					//printf("%d ", tryVector[i]);
 					mensger[i].tipo = 0;
-					myConnect->custo[mensger[i].destino-1] = INFINITO;
+					//myConnect->custo[mensger[i].destino-1] = INFINITO;
 					//nodeTime[i] = time(0);
 					//mensger[i].ack = (int)time(0);
 					for(j = 0; j < vizinhos; j++){
 						mensger[j].DV.dist[mensger[i].destino-1] = INFINITO;
 						mensger[j].DV.router[mensger[i].destino-1] = INFINITO; 
 					}
+					for(k = 0; k < vertices; k++){
+						if(mensger[i].destino == myConnect->idImediato[k])
+							myConnect->custo[k] = INFINITO;
+					}
+					printf("v:%d %d \n", mensger[i].destino, tryVector[i]);
 				}
 				//conf = copyData(conf,&mensg[i]);
-				else{
+				if(mensger[i].tipo == 2){
 					mensger[i].idMsg = id++;
-				insereFila(&mensger[i]);}
+					insereFila(&mensger[i]);
+					tryVector[i]++;
+				}
+				puts("aq");
 				
 				//printf("des :%d e %d \n", filas[tamanho-1].mesg->destino, tamanho);
 				//puts("ok");
@@ -600,38 +616,46 @@ void server(void){ //Para receber as mensagens
 		
 		pthread_mutex_lock(&count_mutex); //Acesso único também a partir deste ponto
 		//puts("oi");
-		
+		puts("aqdfg");
 		if(mensg.tipo == 2){ //mensagem de dv
 			
-				printf("\n");
+				/*printf("\n");
 					for(i = 0; i < vertices; i++){
 						printf("%d ", mensg.DV.router[i]);
 						printf("%d \n", mensg.DV.dist[i]);
-					}
+					}*/
 			
 				//msg_t *conf = (msg_t *)malloc(sizeof(msg_t));
 				
-				for(i = 0 ; i < vertices; i++){
-					//printf("%d %d %d %d ..\n", mensg.DV.router[i], mensg.DV.dist[i], mensg.DV.dist[myRouter->id-1],myConnect->custo[i]);
-					if(mensg.DV.router[i] != INFINITO && mensg.DV.router[i]!= myRouter->id) {
-						temp = mensg.DV.dist[i] + mensg.DV.dist[myRouter->id-1];
-						
-						for(j = 0; j < vizinhos; j++){
+				for(j = 0; j < vizinhos; j++){
 							if(mensger[j].destino == mensg.origem){
-								nodeTime[j] = time(0);
+								//nodeTime[j] = time(0);
+								tryVector[j] = 0;
 								break;
 							}
 						}
 						if(j < vizinhos)
-							if(mensg.DV.router[i] != INFINITO && mensger[j].tipo == 0)
+							if(mensger[j].tipo == 0)
 								mensger[j].tipo = 2;
+				
+				for(i = 0 ; i < vertices; i++){
+					//printf("%d %d %d %d ..\n", mensg.DV.router[i], mensg.DV.dist[i], mensg.DV.dist[myRouter->id-1],myConnect->custo[i]);
+					if(mensg.DV.router[i] != INFINITO && mensg.DV.router[i] != myRouter->id) {
+						temp = mensg.DV.dist[i] + myTable->custo[mensg.origem-1];
 						
-						if(mensg.DV.router[i] == myConnect->idVizinho[i] && myConnect->idImediato[i] == mensg.origem){
+						if(temp > INFINITO){
+							myConnect->custo[i] = INFINITO;
+							myConnect->alterado = 1;
+						}
+						else if(myConnect->enlace[i] == 1 && myConnect->idImediato[i] == mensg.origem){
 							if(myConnect->custo[i] != temp){
 								myConnect->custo[i] = temp;
+								flag = 1;
 								//myConnect->idImediato[i] = mensg.origem;
+							//	puts("sssssss");
 								myConnect->alterado = 1;
 							}
+							//puts("oi");
 						}
 						
 						else if( (temp  < myConnect->custo[i])){
@@ -1073,6 +1097,8 @@ int main(int argc, char *arq[]){
 	
   //Lê a tabela de roteamento com os caminhos mínimos já computados
   if(!(myConnect = leEnlaces(link_u, vertices =countIn(rout_u),routerId)))return 0;
+  
+  if(!(myTable = leEnlaces(link_u, vertices,routerId)))return 0;
     
   //Lê informações sobre este roteador ( id, porta, ip)   
   if(!(myRouter = leInfos(rout_u, routerId))) return 0;
@@ -1080,7 +1106,7 @@ int main(int argc, char *arq[]){
  int i;
   
   for(i = 0; i < vertices; i++){
-	  printf("%d %d %d\n", myConnect->idVizinho[i],myConnect->custo[i],myConnect->idImediato[i]);
+	  printf("%d %d %d  %d\n", myConnect->idVizinho[i],myConnect->custo[i],myConnect->idImediato[i], myConnect->enlace[i]);
 	  
   }
  
