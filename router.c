@@ -326,6 +326,7 @@ void SendDV(void){
 					mensger[i].idMsg = id++;
 					//nodeTime[i] = time(0);
 					insereFila(&mensger[i]);
+					tryVector[i]++;
 					printf("Roteador : %d enviando pacote DV #%d para roteador %d\n", myRouter->id,mensger[i].idMsg, mensger[i].destino);
 			  }
 		  }
@@ -356,7 +357,7 @@ void SendDV(void){
 				
 				//time_t aux = (time_t)mensger[i].ack;
 				//tempo = difftime(time(0), nodeTime[i]);
-				if(tryVector[i] > MAX_TENTATIVAS){
+				if(tryVector[i] >= 5){
 					//printf("%d ", tryVector[i]);
 					mensger[i].tipo = 0;
 					//myConnect->custo[mensger[i].destino-1] = INFINITO;
@@ -378,7 +379,7 @@ void SendDV(void){
 					insereFila(&mensger[i]);
 					tryVector[i]++;
 				}
-				puts("aq");
+				//puts("aq");
 				
 				//printf("des :%d e %d \n", filas[tamanho-1].mesg->destino, tamanho);
 				//puts("ok");
@@ -616,7 +617,7 @@ void server(void){ //Para receber as mensagens
 		
 		pthread_mutex_lock(&count_mutex); //Acesso único também a partir deste ponto
 		//puts("oi");
-		puts("aqdfg");
+		//puts("aqdfg");
 		if(mensg.tipo == 2){ //mensagem de dv
 			
 				/*printf("\n");
@@ -633,10 +634,10 @@ void server(void){ //Para receber as mensagens
 								tryVector[j] = 0;
 								break;
 							}
-						}
-						if(j < vizinhos)
-							if(mensger[j].tipo == 0)
-								mensger[j].tipo = 2;
+				}
+				if(j < vizinhos)
+					if(mensger[j].tipo == 0)
+						mensger[j].tipo = 2;
 				
 				for(i = 0 ; i < vertices; i++){
 					//printf("%d %d %d %d ..\n", mensg.DV.router[i], mensg.DV.dist[i], mensg.DV.dist[myRouter->id-1],myConnect->custo[i]);
@@ -645,7 +646,7 @@ void server(void){ //Para receber as mensagens
 						
 						if(temp > INFINITO){
 							myConnect->custo[i] = INFINITO;
-							myConnect->alterado = 1;
+							//myConnect->alterado = 1;
 						}
 						else if(myConnect->enlace[i] == 1 && myConnect->idImediato[i] == mensg.origem){
 							if(myConnect->custo[i] != temp){
