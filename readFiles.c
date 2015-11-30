@@ -1,7 +1,7 @@
 /**
  * Compilado com a versão:
- * 		-gcc version 4.6.3 (Ubuntu/Linaro 4.6.3-1ubuntu5)
- * Linux Ubuntu 12.04LTS
+ * 		gcc version 4.8.2 (GCC)
+ * Linux Slackware 14.1
  * 
  * Dijktra code
  *   -http://www.vivaolinux.com.br/script/Algoritmo-de-Dijkstra
@@ -37,7 +37,8 @@ int countIn(char rot[CONST]){
 
 }
 
-//Esta função contabilidade para cada vertice, o caminho mínimo para todos os demais
+/*Esta função cria a tabela de roteamento; computa as distancias iniciais para
+seus vizinhos, e ao demais seta como INFINITO*/ 
 tabela_t *leEnlaces( char enl[CONST], int count, int myId){
 
   tabela_t *myConnect;

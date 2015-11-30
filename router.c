@@ -1,8 +1,14 @@
 
 /**
+ * Roteamento com Bellman-Ford
+ * 
+ * Aluno : Edson Lemes da Silva
+ * 
+ * 
  * Compilado com a versão:
- * 		-gcc version 4.6.3 (Ubuntu/Linaro 4.6.3-1ubuntu5)
- * Linux Ubuntu 12.04LTS
+ * 		-gcc version 4.8.2 (GCC)
+ * Linux Slackware 14.1
+ *
  *
  * Este programa representa um roteador, onde o seu objetivo é 'rotear' pacotes
  * UDP da origem até o destino. O programa recebe  um argumenta da linha de comandos, sendo
@@ -22,7 +28,7 @@
  * destino final, outra possibilidade é quando o roteador é o destino, e a última para
  * o caso de ser uma mensagem de confirmação.
  * 
- * Para o caso de envio de pacotes, é necessário assegurar um tempo finito de tentativas,
+ * Para o caso de envio de mensagens do usuário é necessário assegurar um tempo finito de tentativas,
  * deste modo, quando uma mensagem é escalonada para envio, é definido por padrão um tempo
  * de espera(TIMEOUT) de 2 segundos. Contudo, também é definido uma quantidade finita de 
  * tentativas, neste caso são 3 tentativas; isto nos da um tempo total de 6 segundos para
@@ -31,8 +37,18 @@
  * Cada roteador dispõe de uma tabela de roteamento, nela estão colocadas informações 
  * sobre todos os roteadores, assim, para cada um deles está definido o próximo salto
  * (NextHop), seguido pelo custo mínimo para o destino a partir da origem calculada
- * por uma função de Dijkstra.
- *
+ * por uma função de Bellman-Ford distribuído.
+ * 
+ * A execução do algoritmo de Bellman-Ford acontece deste modo: Ao iniciar, cada roteador sabe 
+ * unicamente a distância para seus vizinhos ( inicialmente assume que todos os vizinhos 
+ * estão ligados), de tempo em tempo cada roteador envia seus vetores de distâncias (DV) 
+ * atualizados para seus vizinhos, após algum instantes, as distâncias mínimas para todos
+ * os roteadores estarão computadas. Quando algum roteador tenta enviar seu DV para algum 
+ * vizinho, mas o mesmo não nenhum DV dele; neste caso assume-se que o enlace com aquele 
+ * roteador "caiu". Ao ser detectado essa falha, as rotas para aquele destino são setadas como 
+ * infinito, e quando este é reinicializado as distâncias iniciais são novamente computadas.
+ * O envio de vetores de distâncias são mantidas através de uma thread separada.
+ * 
  * A implementação de mensagens de confirmação funciona da seguinte maneira: quando uma
  * mensagem é roteada da origem até o destino, cada roteador do caminho é marcado em um
  * vetor de parent, assim a confirmação é propagada do destino até a origem.
@@ -81,7 +97,7 @@ int iniciaFila();
 void insereFila(msg_t *buf);
 void remove_fix(int i);
 void insere_fix(msg_t *nova, int save, int saveID, time_t back);
-//msg_t *copyStatic(msg_t *new, msg_t buf);
+
 msg_t *copyData(msg_t *new, msg_t *buf);
 DistVector_t *copyVector(DistVector_t *new, DistVector_t *buf);
 //Variáveis compartilhadas entre as threads
@@ -89,12 +105,12 @@ DistVector_t *copyVector(DistVector_t *new, DistVector_t *buf);
 int vertices,vizinhos=0; // Número de vértices do grafo;
 int tamanho = 0;//controle da fila, inicialmente vazia.
 tabela_t *myConnect = NULL; //lista de roteamento
-tabela_t *myTable = NULL;
+tabela_t *myTable = NULL;  //copia da lista
 router_t *myRouter = NULL; //informações do roteador
 fila_t *filas = NULL;
-DistVector_t *vetor = NULL;
+DistVector_t *vetor = NULL; //vetor de distancia
 msg_t mensger[MAX_PARENT];
-time_t *nodeTime;
+//time_t *nodeTime;
 int *tryVector, flag = 1;
 
 char rout_u[20] = "roteador.config"; //Arquivo de configuração dos roteadores;
@@ -102,6 +118,10 @@ char link_u[20] = "enlaces.config"; //Arquivo de conf. dos enlaces;
 
 pthread_mutex_t count_mutex = PTHREAD_MUTEX_INITIALIZER; //mutex para controlar o acesso as variáveis globais
 
+/**
+ * @function printTime - Computa a hora atual
+ ** 
+ **/
 void printTime(){
 	
 	int i;
@@ -120,7 +140,12 @@ void printTime(){
 	
 }
 
-
+/**
+ * @function atualizaDV - Pega as informações da tabela de roteamento e 
+ * coloca no vetor de distância.
+ * @param vector - vetor de distancia
+ *
+ **/
 DistVector_t *atualizaDV(DistVector_t *vector){
 	
 	int i;
@@ -135,7 +160,11 @@ DistVector_t *atualizaDV(DistVector_t *vector){
 	return vector;
 }
 
-
+/**
+ * Esta função inicializa o vetor com dados
+ * setado como INFINITO
+ * 
+ **/
 DistVector_t *initDV2(DistVector_t *vetor){
 	
 	int i;
@@ -146,14 +175,22 @@ DistVector_t *initDV2(DistVector_t *vetor){
 	}
 	return vetor;
 }
+
+/**
+ * @function initDV - Inicializa as estruturas do pacote a ser enviado.
+ * Para simplificar a implementação, foi usado a mesma estrutura das 
+ * mensagens para o usuário, deste modo, em cada caso pode haver variáveis
+ * não utilizadas ( espaço disperdiçado ).
+ * 
+ * 
+ * 
+ **/
 msg_t initDV(msg_t me, int who,int id){
 	
 	router_t *vis = NULL;
-	//printf("valor %d  edma", who);
-	//int i, j;
-	//char ip[IP];
+	
 	vis = leInfos(rout_u, who);
-	//puts("Oii");puts("tt");
+	
 	strcpy(me.ip, vis->ip);
 	free(vis);
 	me.tipo = 2;
@@ -162,18 +199,6 @@ msg_t initDV(msg_t me, int who,int id){
 	me.origem = myRouter->id;
 	me.destino = who;
 	me.nextH = who;
-	//strcpy(me->ip, ip);
-	
-	//me.DV = (DistVector_t *)malloc(sizeof(DistVector_t));
-	//if(!me.DV){
-	//	me.tipo = ALOCACAO_ERRO;
-		
-	//}
-	
-	
-	//me->DV->exists = (int *)malloc(sizeof(int)*vertices);
-	//me.DV->dist = (int *)malloc(sizeof(int)*vertices);
-	//me.DV->router = (int *)malloc(sizeof(int)*vertices);
 	
 	return me;
 }
@@ -211,6 +236,13 @@ msg_t initDV(msg_t me, int who,int id){
    }
 }*/
 
+
+/**
+ * 
+ * Esta função imprime os dados para cada roteador a partir
+ * da tabela de roteamento.
+ * 
+ **/
 void imprimeTabela(){
 	
 	int i;
@@ -234,32 +266,41 @@ void imprimeTabela(){
 	printf("-----------------------\n");
 }
 
+
+/**
+ * @function SendDV - Thread responsável por computar o vetor de distância, e 
+ * encaminhar para a fila do roteador. Periodicamente é enviado o DV para os vizinhos,
+ * este tempo é aproximadamente de 4 segundos. Após este tempo, também é contabilizado 
+ * a quantidade de vezes de inatividade dos roteadores vizinhos, ou seja, se durante 
+ * algumas fatias de tempo, algum dos roteadores vizinhos não enviar seus respectivos
+ * vetores de distâncias, neste caso assume-se que o enlace "caiu".
+ * 
+ **/
 void SendDV(void){
 
   time_t timest;
  
-  //router_t *vis = NULL;
-  
-  //msg_t aux;
  
-  //int vizinhos = 0;
   int i,j,k;
   int *vet;
   int id = 1;
-  vetor = (DistVector_t *)malloc(sizeof(DistVector_t));
-  //vetor->dist = (int *)malloc(sizeof(int)*vertices);
-  //vetor->router = (int *)malloc(sizeof(int)*vertices);
+  if(!(vetor = (DistVector_t *)malloc(sizeof(DistVector_t)))){//inicializa o vetor de distancia
+	printf("Problema em alocar o vetor de distancia\n");
+	return;
+  }
   vetor = initDV2(vetor); //inicializa todo mundo com infinito
   vetor->dist[myRouter->id-1] = 0;
   vetor->router[myRouter->id-1] = myRouter->id;//distancia para mim mesmo é zero
   
   
-  vet = (int *)malloc(sizeof(int)*vertices);
+  if(!(vet = (int *)malloc(sizeof(int)*vertices))){
+	printf("Problema com alocacao\n");	
+	return;
+	}
   
   
   for(i = 0; i < vertices; i++){
-	  //vetor->dist[i] = INFINITO;
-	  //vetor->router[i] = INFINITO;
+	  
 	  if((myConnect->idVizinho[i] != myRouter->id) && (myConnect->custo[i] != INFINITO) && (myConnect->idImediato[i] == myConnect->idVizinho[i])){
 			vet[vizinhos] = myConnect->idVizinho[i];
 			vetor->dist[i] = myConnect->custo[i];
@@ -269,7 +310,10 @@ void SendDV(void){
 		}
   }
   //nodeTime = (time_t *)malloc(sizeof(time_t)*vizinhos);
-  tryVector = (int *)malloc(sizeof(int)*vizinhos);
+  if(!(tryVector = (int *)malloc(sizeof(int)*vizinhos))){
+	printf("Problema com alocacao dinamica\n");
+	return;
+  }
   //myConnect->alterado = 0;
   //printf("vv: %d %d %d ~  \n", vet[0], myConnect->idVizinho[0],vizinhos);
   //mensg = (msg_t *)malloc(sizeof(msg_t)*vizinhos);

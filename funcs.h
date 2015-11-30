@@ -9,13 +9,16 @@
 #define MAX_TENTATIVAS 3 //número max de tentativas após timeout
 #define TIMEOUT 2 //temporizador
 #define INFINITO 999 //representacao do infinito
-#define MAX_TIME_DV 4
-#define CONSTANTE_DV 20
+#define MAX_TIME_DV 4 //tempo de envio do DV
+#define CONSTANTE_DV 20 //numero de roteadores no vetor de distancia 
 
 //tabela de roteamento
 
 /**
  * @struct tabela_t - representa a tabela de roteamento.
+ * 
+ * alterado - flag para o caso de tiver atualizações na tabela
+ * enlace - flag para cada roteador ( identificar as adjacencias após inicializar)
  * idVizinho - vetor contendo o id de cada roteador do grafo;
  * custo - vetor de custo mínimo para cada roteador;
  * idImediato - o próximo roteador no caminho até o destino.
@@ -30,6 +33,14 @@ typedef struct tab{
   int *idImediato; //proximo vertice no caminho até idVizinho
 }tabela_t;
 
+
+/**
+ * @struct DistVector_t - Estrutura do vetor de distancia
+ * 
+ * router - vetor que com id's de cada roteador
+ * dist - a distância estimada 
+ **/
+
 typedef struct dv{
 	//int exists;
 	int router[MAX_PARENT];
@@ -39,15 +50,17 @@ typedef struct dv{
 
 /**
  * @struct msg_t - representa o pacote a ser enviado, juntamente com a mensagem do usuário.
+ * tipo - tipo da msg ( 1. Usuário; 2. Vetor de distancia);
  * idMsg - identificador da mensagem;
  * origem - Roteador que enviou a mensagem;
  * destino - Roteador destino para a msg;
  * nextH - Próximo roteador no caminho até o destino;
  * ip - ip do rot. origem;
- * text - a mensagem em si (Max. 100 bytes);
- * pSize - contador do vetor de parent;
- * ack - flag de confirmação de pacote;
- * parent - vetor estático que conta os roteador pelo caminho.
+ * text - a mensagem em si (Max. 100 bytes). (nao usado para msg do tipo 2);
+ * pSize - contador do vetor de parent. (nao usado para msg do tipo 2);
+ * ack - flag de confirmação de pacote. (nao usado para msg do tipo 2);
+ * parent - vetor estático que conta os roteador pelo caminho. (nao usado para msg do tipo 2);
+ * DV - vetor de distancia para ser enviado ( nao usado para msn do tipo 1);
  *
  **/
 
@@ -89,5 +102,5 @@ int countIn(char rot[CONST]); //conta vértices do grafo
 void enviarMsg(void); //Msg do usuário
 void server(void); //server que recebe mensagens
 void serverControl(void); //controle das filas
-msg_t initDV(msg_t me, int who, int id);
-void SendDV(void);
+msg_t initDV(msg_t me, int who, int id);//inicia o DV
+void SendDV(void); //thread que controla o DV
